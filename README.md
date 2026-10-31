@@ -1,0 +1,1 @@
+# hopemanity-ai-trading
