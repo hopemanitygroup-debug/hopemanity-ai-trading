@@ -130,7 +130,7 @@ def main():
     pd.DataFrame(trades, columns=["days","opened","closed","side","net","fees","reason"]).to_csv(output / "trades.csv", index=False)
     (output / "summary.json").write_text(json.dumps({"strategy": "V6+scalping V2", "source": "Binance spot historical archives",
         "fee_per_side": FEE, "slippage_per_side": SLIP, "funding_modeled": False,
-        "results": results}, indent=2), encoding="utf-8")
+        "results": results}, indent=2, default=lambda x: x.item() if isinstance(x, np.generic) else str(x)), encoding="utf-8")
     print(pd.DataFrame(results).drop(columns=["diagnostics"]).to_string(index=False))
     print("Filter diagnostics:", json.dumps({str(x["days"]):x["diagnostics"] for x in results}))
 
