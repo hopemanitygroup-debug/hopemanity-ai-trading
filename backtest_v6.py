@@ -117,6 +117,7 @@ def test(ex, symbol, days):
         if t < start:
             continue
         # Resolve stops/targets using current 5m high/low; pessimistic SL-first on both touched.
+        exited_this_bar = False
         if position:
             p = position
             stop_hit = bar.low <= p["stop"] if p["side"] == "LONG" else bar.high >= p["stop"]
@@ -133,7 +134,8 @@ def test(ex, symbol, days):
                 balance += gross - exit_fee
                 trades.append(dict(pair=symbol, days=days, opened=p["opened"], closed=int(t), side=p["side"], entry=p["entry"], exit=exit_price, net=net, fees=p["entry_fee"] + exit_fee, reason="SL" if stop_hit else "TP"))
                 position = None
-        if position is None:
+                exited_this_bar = True
+        if position is None and not exited_this_bar:
             h = hour[hour.index + 3600000 <= t]
             m = fifteen[fifteen.index + 900000 <= t]
             f = five[five.index + 300000 <= t]
@@ -162,11 +164,12 @@ def test(ex, symbol, days):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default="results-v6")
+    parser.add_argument("--periods", type=int, nargs="+", default=PERIODS)
     args = parser.parse_args()
     ex = None  # Historical archive source; no exchange API calls
     results, trades = [], []
     for pair in PAIRS:
-        for days in PERIODS:
+        for days in args.periods:
             print(f"Testing {pair} {days}d", flush=True)
             result, journal = test(ex, pair, days)
             results.append(result)
@@ -176,6 +179,12 @@ def main():
     pd.DataFrame(results).to_csv(dest / "summary.csv", index=False)
     pd.DataFrame(trades, columns=["pair","days","opened","closed","side","entry","exit","net","fees","reason"]).to_csv(dest / "trades.csv", index=False)
     print(pd.DataFrame(results).to_string(index=False), flush=True)
+    if trades:
+        journal_df = pd.DataFrame(trades)
+        eth = journal_df[journal_df.pair == "ETH/USDT"]
+        if not eth.empty:
+            print("ETH trade diagnostics (net after fees):", flush=True)
+            print(eth.groupby(["days", "side", "reason"]).agg(trades=("net", "size"), net=("net", "sum"), fees=("fees", "sum")).to_string(), flush=True)
     (dest / "summary.json").write_text(json.dumps({"generated_utc": datetime.now(timezone.utc).isoformat(), "assumptions": {"capital_per_pair": CAPITAL, "notional": NOTIONAL, "fee_per_side": FEE, "slippage_per_side": SLIP, "stop_first_if_both_hit": True, "closed_candles_only": True}, "results": results}, ensure_ascii=False, indent=2, default=lambda x: x.item() if isinstance(x, np.generic) else str(x)), encoding="utf-8")
     print(pd.DataFrame(results).to_string(index=False))
 
