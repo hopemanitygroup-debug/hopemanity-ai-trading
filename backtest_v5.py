@@ -2,6 +2,10 @@
 import argparse
 import json
 import time
+import io
+import zipfile
+import requests
+from datetime import timedelta
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,26 +23,42 @@ PERIODS = [7, 30]
 
 
 def history(ex, symbol, tf, days):
-    now = ex.milliseconds()
-    since = now - (days + 7) * 86400000
-    rows = []
-    while since < now:
-        batch = ex.fetch_ohlcv(symbol, tf, since=since, limit=1000)
-        if not batch:
-            break
-        rows.extend(batch)
-        nxt = batch[-1][0] + 1
-        if nxt <= since:
-            break
-        since = nxt
-        if len(batch) < 1000:
-            break
-    df = pd.DataFrame(rows, columns=["ts", "open", "high", "low", "close", "volume"])
-    if df.empty:
-        raise ValueError(f"No candles: {symbol} {tf}")
-    df = df.drop_duplicates("ts").sort_values("ts").set_index("ts")
-    # Exclude the current, possibly unfinished candle.
-    duration = ex.parse_timeframe(tf) * 1000
+    """Download Binance public historical ZIP archives; no trading API access."""
+    pair = symbol.replace("/", "")
+    today = datetime.now(timezone.utc).date()
+    first = today - timedelta(days=days + 8)
+    frames = []
+    session = requests.Session()
+    for offset in range((today - first).days + 1):
+        day = first + timedelta(days=offset)
+        name = f"{pair}-{tf}-{day.isoformat()}.zip"
+        url = f"https://data.binance.vision/data/spot/daily/klines/{pair}/{tf}/{name}"
+        try:
+            response = session.get(url, timeout=30)
+            if response.status_code == 404:
+                continue
+            response.raise_for_status()
+            with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+                csv_name = next(n for n in archive.namelist() if n.endswith(".csv"))
+                raw = pd.read_csv(archive.open(csv_name), header=None)
+                if isinstance(raw.iloc[0, 0], str) and not raw.iloc[0, 0].isdigit():
+                    raw = raw.iloc[1:]
+                if raw.empty:
+                    continue
+                raw = raw.iloc[:, :6]
+                raw.columns = ["ts", "open", "high", "low", "close", "volume"]
+                frames.append(raw)
+        except (requests.RequestException, zipfile.BadZipFile, ValueError) as err:
+            raise RuntimeError(f"Historical archive unavailable: {url}: {err}") from err
+    if not frames:
+        raise RuntimeError(f"No historical archive candles for {symbol} {tf}")
+    df = pd.concat(frames, ignore_index=True)
+    df["ts"] = pd.to_numeric(df["ts"], errors="coerce")
+    # Binance historical archives may use microseconds for timestamps.
+    df.loc[df["ts"] > 1e14, "ts"] /= 1000
+    df = df.dropna(subset=["ts"]).drop_duplicates("ts").sort_values("ts").set_index("ts")
+    duration = {"5m": 300000, "15m": 900000, "1h": 3600000}[tf]
+    now = int(datetime.now(timezone.utc).timestamp() * 1000)
     df = df[df.index + duration <= now]
     return df.astype(float)
 
@@ -143,7 +163,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default="results")
     args = parser.parse_args()
-    ex = ccxt.binance({"enableRateLimit": True, "options": {"defaultType": "spot"}})
+    ex = None  # Historical archive source; no exchange API calls
     results, trades = [], []
     for pair in PAIRS:
         for days in PERIODS:
