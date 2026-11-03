@@ -18,7 +18,7 @@ FEE = 0.001
 SLIP = 0.0002
 CAPITAL = 10000.0
 NOTIONAL = 1000.0
-PAIRS = ["BTC/USDT", "ETH/USDT", "BNB/USDT"]
+PAIRS = ["BTC/USDT"]
 PERIODS = [7, 30]
 
 
@@ -181,9 +181,9 @@ def main():
     print(pd.DataFrame(results).to_string(index=False), flush=True)
     if trades:
         journal_df = pd.DataFrame(trades)
-        eth = journal_df[journal_df.pair == "ETH/USDT"]
+        eth = journal_df[journal_df.pair == "BTC/USDT"]
         if not eth.empty:
-            print("ETH trade diagnostics (net after fees):", flush=True)
+            print("BTC trade diagnostics (net after fees):", flush=True)
             print(eth.groupby(["days", "side", "reason"]).agg(trades=("net", "size"), net=("net", "sum"), fees=("fees", "sum")).to_string(), flush=True)
     (dest / "summary.json").write_text(json.dumps({"generated_utc": datetime.now(timezone.utc).isoformat(), "assumptions": {"capital_per_pair": CAPITAL, "notional": NOTIONAL, "fee_per_side": FEE, "slippage_per_side": SLIP, "stop_first_if_both_hit": True, "closed_candles_only": True}, "results": results}, ensure_ascii=False, indent=2, default=lambda x: x.item() if isinstance(x, np.generic) else str(x)), encoding="utf-8")
     print(pd.DataFrame(results).to_string(index=False))
