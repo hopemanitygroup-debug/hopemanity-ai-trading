@@ -4,6 +4,7 @@ on:
     paths:
       - 'backtest_hybrid_v6_scalping.py'
       - '.github/workflows/hybrid-scalping.yml'
+      - 'requirements.txt'
   workflow_dispatch:
 jobs:
   backtest:
@@ -11,10 +12,17 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r requirements.txt
+      - name: Verify checkout and install
+        run: |
+          echo "Branch: $GITHUB_REF"
+          git log -1 --oneline
+          ls -la
+          python -m pip install -r requirements.txt
       - run: python backtest_hybrid_v6_scalping.py --out results-hybrid
       - uses: actions/upload-artifact@v4
         if: always()
