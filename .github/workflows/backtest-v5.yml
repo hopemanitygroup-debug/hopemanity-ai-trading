@@ -1,0 +1,28 @@
+name: MTF Pro V5 Backtest
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - backtest_v5.py
+      - .github/workflows/backtest-v5.yml
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements-backtest.txt
+      - name: Backtest BTC ETH BNB for 7 and 30 days
+        run: python backtest_v5.py --out results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mtf-v5-results
+          path: results/
+          if-no-files-found: warn
