@@ -5,6 +5,7 @@ on:
       - 'backtest_hybrid_v6_scalping.py'
       - '.github/workflows/hybrid-scalping.yml'
       - 'requirements.txt'
+      - 'backtest_hybrid_v2.py'
   workflow_dispatch:
 jobs:
   backtest:
@@ -23,9 +24,14 @@ jobs:
           git log -1 --oneline
           ls -la
           python -m pip install -r requirements.txt
-      - run: python backtest_hybrid_v6_scalping.py --out results-hybrid
+      - name: Baseline strict hybrid
+        run: python backtest_hybrid_v2.py --mode strict --out results-hybrid-strict
+      - name: Experimental relaxed V2
+        run: python backtest_hybrid_v2.py --mode relaxed --out results-hybrid-v2
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: hybrid-scalping-results
-          path: results-hybrid/
+          path: |
+            results-hybrid-strict/
+            results-hybrid-v2/
