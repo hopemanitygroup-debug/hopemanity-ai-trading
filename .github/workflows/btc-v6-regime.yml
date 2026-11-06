@@ -1,0 +1,43 @@
+name: BTC V6 regime comparison
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/btc-v6-market-regimes]
+    paths:
+      - 'backtest_v6.py'
+      - 'market_regime_v6.py'
+      - 'test_market_regime_v6.py'
+      - '.github/workflows/btc-v6-regime.yml'
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pytest
+      - run: python -m pytest -q test_market_regime_v6.py
+  backtest:
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        days: [7, 30]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy pandas requests ta ccxt
+      - name: Compare legacy and regime V6
+        run: python backtest_v6.py --strategy both --periods ${{ matrix.days }} --out results-v6-${{ matrix.days }}d
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-v6-comparison-${{ matrix.days }}d
+          path: results-v6-${{ matrix.days }}d/
+          if-no-files-found: warn
