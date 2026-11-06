@@ -13,6 +13,7 @@ import ccxt
 import numpy as np
 import pandas as pd
 import ta
+from market_regime_v6 import decide, classify
 
 FEE = 0.001
 SLIP = 0.0002
@@ -106,12 +107,13 @@ def entry(last, prev, direction):
     return (last.close < last.ema9 or last.close < prev.low) and last.macdh < prev.macdh and last.macdh < 0 and last.close < last.open
 
 
-def test(ex, symbol, days):
+def test(ex, symbol, days, strategy='regime'):
     frames = {tf: indicators(history(ex, symbol, tf, days)) for tf in ("5m", "15m", "1h")}
     five, fifteen, hour = frames["5m"], frames["15m"], frames["1h"]
     # Signals at the next 5m open, using only bars already CLOSED by then.
     start = five.index.max() - days * 86400000
     trades, equity = [], []
+    regime_counts = {k: 0 for k in ('BULL', 'BEAR', 'RANGE', 'TRANSITION', 'UNKNOWN')}
     balance, position = CAPITAL, None
     for t, bar in five.iterrows():
         if t < start:
@@ -132,7 +134,7 @@ def test(ex, symbol, days):
                 exit_fee = abs(exit_price * p["qty"]) * FEE
                 net = gross - p["entry_fee"] - exit_fee
                 balance += gross - exit_fee
-                trades.append(dict(pair=symbol, days=days, opened=p["opened"], closed=int(t), side=p["side"], entry=p["entry"], exit=exit_price, net=net, fees=p["entry_fee"] + exit_fee, reason="SL" if stop_hit else "TP"))
+                trades.append(dict(regime=p.get('regime', 'LEGACY'), pair=symbol, days=days, opened=p["opened"], closed=int(t), side=p["side"], entry=p["entry"], exit=exit_price, net=net, fees=p["entry_fee"] + exit_fee, reason="SL" if stop_hit else "TP"))
                 position = None
                 exited_this_bar = True
         if position is None and not exited_this_bar:
@@ -140,16 +142,36 @@ def test(ex, symbol, days):
             m = fifteen[fifteen.index + 900000 <= t]
             f = five[five.index + 300000 <= t]
             if len(h) >= 60 and len(m) >= 60 and len(f) >= 60:
-                direction = trend(h.iloc[-1])
-                if direction and h.iloc[-1].adx >= 27 and setup(m.iloc[-1], m.iloc[-2], direction) and entry(f.iloc[-1], f.iloc[-2], direction):
-                    atr = m.iloc[-1].atr
-                    if np.isfinite(atr) and atr > 0:
-                        price = bar.open * (1 + SLIP if direction == "LONG" else 1 - SLIP)
-                        qty = NOTIONAL / price
-                        fee = NOTIONAL * FEE
+                current_regime = classify(h.iloc[-1])
+                regime_counts[current_regime] += 1
+                if strategy == 'regime':
+                    sig = decide(h.iloc[-1], m.iloc[-1], m.iloc[-2],
+                                 f.iloc[-1], f.iloc[-2],
+                                 fee_per_side=FEE, slippage_per_side=SLIP)
+                    direction = sig.side
+                    stop_distance, target_distance = sig.stop_distance, sig.target_distance
+                else:
+                    direction = trend(h.iloc[-1])
+                    confirmed = (direction and h.iloc[-1].adx >= 27
+                                 and setup(m.iloc[-1], m.iloc[-2], direction)
+                                 and entry(f.iloc[-1], f.iloc[-2], direction))
+                    if not confirmed:
+                        direction = None
+                    stop_distance = 1.8 * m.iloc[-1].atr
+                    target_distance = 2.2 * stop_distance
+                if direction in ('LONG', 'SHORT') and np.isfinite(stop_distance) and stop_distance > 0:
+                    price = bar.open * (1 + SLIP if direction == 'LONG' else 1 - SLIP)
+                    qty = NOTIONAL / price
+                    fee = NOTIONAL * FEE
+                    sign = 1 if direction == 'LONG' else -1
+                    # Re-check target vs costs at actual fill price, not signal close.
+                    cost_distance = price * 2 * (FEE + SLIP)
+                    if target_distance > max(1.5 * stop_distance, 2 * cost_distance):
                         balance -= fee
-                        sign = 1 if direction == "LONG" else -1
-                        position = dict(opened=int(t), side=direction, entry=price, qty=qty, entry_fee=fee, stop=price-sign*1.8*atr, target=price+sign*2.2*1.8*atr)
+                        position = dict(opened=int(t), side=direction, regime=current_regime,
+                                        entry=price, qty=qty, entry_fee=fee,
+                                        stop=price-sign*stop_distance,
+                                        target=price+sign*target_distance)
         unrealized = 0 if position is None else (bar.close-position["entry"])*position["qty"]*(1 if position["side"]=="LONG" else -1)
         equity.append(balance + unrealized)
     # Mark-to-market any open position; no fictitious close.
@@ -158,33 +180,35 @@ def test(ex, symbol, days):
     for value in equity:
         peak = max(peak, value)
         dd = max(dd, (peak-value)/peak*100)
-    return dict(pair=symbol, days=days, equity=round(e, 2), pnl=round(e-CAPITAL, 2), return_pct=round((e/CAPITAL-1)*100, 3), closed_trades=len(trades), wins=sum(t["net"]>0 for t in trades), win_rate_pct=round(100*sum(t["net"]>0 for t in trades)/len(trades), 2) if trades else 0, max_drawdown_pct=round(dd, 3), fees_closed=round(sum(t["fees"] for t in trades), 2), open_position=bool(position)), trades
+    return dict(strategy=strategy, regime_counts=regime_counts, pair=symbol, days=days, equity=round(e, 2), pnl=round(e-CAPITAL, 2), return_pct=round((e/CAPITAL-1)*100, 3), closed_trades=len(trades), wins=sum(t["net"]>0 for t in trades), win_rate_pct=round(100*sum(t["net"]>0 for t in trades)/len(trades), 2) if trades else 0, max_drawdown_pct=round(dd, 3), fees_closed=round(sum(t["fees"] for t in trades), 2), open_position=bool(position)), trades
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default="results-v6")
+    parser.add_argument("--strategy", choices=("regime", "legacy", "both"), default="both")
     parser.add_argument("--periods", type=int, nargs="+", default=PERIODS)
     args = parser.parse_args()
     ex = None  # Historical archive source; no exchange API calls
     results, trades = [], []
     for pair in PAIRS:
         for days in args.periods:
-            print(f"Testing {pair} {days}d", flush=True)
-            result, journal = test(ex, pair, days)
-            results.append(result)
-            trades.extend(journal)
+            for strategy in (('legacy', 'regime') if args.strategy == 'both' else (args.strategy,)):
+                print(f'Testing {pair} {days}d {strategy}', flush=True)
+                result, journal = test(ex, pair, days, strategy)
+                results.append(result)
+                trades.extend(dict(t, strategy=strategy) for t in journal)
     dest = Path(args.out)
     dest.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(results).to_csv(dest / "summary.csv", index=False)
-    pd.DataFrame(trades, columns=["pair","days","opened","closed","side","entry","exit","net","fees","reason"]).to_csv(dest / "trades.csv", index=False)
+    pd.DataFrame(trades, columns=["strategy","regime","pair","days","opened","closed","side","entry","exit","net","fees","reason"]).to_csv(dest / "trades.csv", index=False)
     print(pd.DataFrame(results).to_string(index=False), flush=True)
     if trades:
         journal_df = pd.DataFrame(trades)
         eth = journal_df[journal_df.pair == "BTC/USDT"]
         if not eth.empty:
             print("BTC trade diagnostics (net after fees):", flush=True)
-            print(eth.groupby(["days", "side", "reason"]).agg(trades=("net", "size"), net=("net", "sum"), fees=("fees", "sum")).to_string(), flush=True)
+            print(eth.groupby(["strategy", "days", "regime", "side", "reason"]).agg(trades=("net", "size"), net=("net", "sum"), fees=("fees", "sum")).to_string(), flush=True)
     (dest / "summary.json").write_text(json.dumps({"generated_utc": datetime.now(timezone.utc).isoformat(), "assumptions": {"capital_per_pair": CAPITAL, "notional": NOTIONAL, "fee_per_side": FEE, "slippage_per_side": SLIP, "stop_first_if_both_hit": True, "closed_candles_only": True}, "results": results}, ensure_ascii=False, indent=2, default=lambda x: x.item() if isinstance(x, np.generic) else str(x)), encoding="utf-8")
     print(pd.DataFrame(results).to_string(index=False))
 
