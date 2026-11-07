@@ -1,0 +1,28 @@
+name: BTC V7.1 AMD comparison
+on:
+  push:
+    branches: [feature/btc-v7-amd]
+  workflow_dispatch:
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        days: [7, 30]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy pandas requests ta ccxt pytest
+      - run: python -m pytest -q test_market_regime_v6.py test_amd_v71.py
+      - name: Compare BTC Legacy Regime V7 AMD
+        run: python backtest_v6.py --strategy all --periods ${{ matrix.days }} --out results-amd-${{ matrix.days }}d
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-amd-comparison-${{ matrix.days }}d
+          path: results-amd-${{ matrix.days }}d/
+          if-no-files-found: warn
