@@ -1,4 +1,4 @@
-name: BTC V8 Hybrid AMD comparison
+name: BTC V8 V6 V7 AMD fusion comparison
 on:
   push:
     branches: [feature/btc-v8-hybrid-amd]
@@ -20,14 +20,14 @@ jobs:
         run: python -m pip install numpy pandas requests ta ccxt pytest
       - name: Verify source and run tests
         run: |
-          ls -l signal_hybrid_v8.py test_hybrid_v8.py signal_amd_v71.py
-          python -m py_compile backtest_v6.py signal_hybrid_v8.py test_hybrid_v8.py
-          python -m pytest -q test_market_regime_v6.py test_amd_v71.py test_hybrid_v8.py
-      - name: Compare Legacy V6 V7 AMD and Hybrid V8
+          ls -l signal_hybrid_v8.py signal_fusion_v8.py test_fusion_v8.py signal_amd_v71.py
+          python -m py_compile backtest_v6.py signal_hybrid_v8.py signal_fusion_v8.py test_fusion_v8.py
+          python -m pytest -q test_market_regime_v6.py test_amd_v71.py test_hybrid_v8.py test_fusion_v8.py
+      - name: Compare Legacy V6 V7 AMD Hybrid and Fusion V8
         run: python backtest_v6.py --strategy all --periods ${{ matrix.days }} --out results-hybrid-v8-${{ matrix.days }}d
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: btc-hybrid-v8-${{ matrix.days }}d
+          name: btc-fusion-v8-${{ matrix.days }}d
           path: results-hybrid-v8-${{ matrix.days }}d/
           if-no-files-found: warn
