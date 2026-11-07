@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""V13.6 server-side PAPER monitor. No API keys or real orders."""
+import json, os, urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+STATE=Path("paper-v13-state.json")
+URL="https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=4h&limit=500"
+def bars():
+    req=urllib.request.Request(URL,headers={"User-Agent":"HopeManity-Paper/1.0"})
+    with urllib.request.urlopen(req,timeout=25) as r: data=json.load(r)
+    now=int(datetime.now(timezone.utc).timestamp()*1000)
+    return [{"t":int(x[0]),"o":float(x[1]),"h":float(x[2]),"l":float(x[3]),"c":float(x[4])}
+            for x in data if int(x[6])<now]
+def indicators(b):
+    e=b[0]["c"]; emas=[]; ats=[]
+    for i,x in enumerate(b):
+        e+=2/201*(x["c"]-e);emas.append(e)
+        terms=[max(b[j]["h"]-b[j]["l"],abs(b[j]["h"]-b[j-1]["c"]),abs(b[j]["l"]-b[j-1]["c"]))
+               for j in range(max(1,i-13),i+1)]
+        ats.append(sum(terms)/len(terms) if terms else x["h"]-x["l"])
+    return emas,ats
+def initial():
+    return {"last":0,"position":None,"realized_pnl":0.0,"fees":0.0,"events":[],"last_check":None,"status":"WAIT"}
+def main():
+    b=bars()
+    if len(b)<240: raise RuntimeError("Insufficient 4h bars")
+    emas,ats=indicators(b)
+    s=json.loads(STATE.read_text()) if STATE.exists() else initial()
+    if not s.get("last"):
+        s["last"]=b[-1]["t"] # no historical orders on first startup
+        s["status"]="INITIALIZED_WAIT"
+    else:
+        unseen=[i for i,x in enumerate(b) if x["t"]>s["last"]]
+        if unseen and unseen[0]==0: raise RuntimeError("History gap >500 bars; refusing to simulate")
+        for i in unseen:
+            x=b[i];p=s["position"]
+            if p:
+                exit_price=None;reason=None
+                if x["o"]>=p["stop"]:exit_price=x["o"];reason="SL_GAP"
+                elif x["h"]>=p["stop"]:exit_price=p["stop"];reason="SL"
+                elif x["l"]<=p["target"]:exit_price=p["target"];reason="TP"
+                elif x["t"]-p["opened_bar"]>=6*4*3600*1000:
+                    exit_price=x["o"];reason="TIME"
+                if exit_price is not None:
+                    fee=p["notional"]*.0015*(1+exit_price/p["entry"])
+                    pnl=p["notional"]*(1-exit_price/p["entry"])-fee
+                    s["fees"]+=fee;s["realized_pnl"]+=pnl
+                    s["events"].append({"time":x["t"],"event":reason,"price":exit_price,"notional":p["notional"],"net_pnl":pnl})
+                    s["position"]=None
+            # Evaluate only the previously closed candle, enter on current open.
+            if s["position"] is None and i>=231:
+                prev=b[i-1];hi=max(z["h"] for z in b[i-21:i-1])
+                signal=(prev["h"]>hi and prev["c"]<hi and prev["c"]<prev["o"]
+                    and prev["c"]<emas[i-1] and emas[i-1]<emas[i-31]
+                    and ats[i-1]/prev["c"]<.012)
+                if signal:
+                    dist=1.5*ats[i-1];entry=x["o"];notional=min(100000,600*entry/dist)
+                    s["position"]={"entry":entry,"stop":entry+dist,"target":entry-1.5*dist,
+                                   "notional":notional,"opened_bar":x["t"]}
+                    s["events"].append({"time":x["t"],"event":"OPEN_SHORT","price":entry,"notional":notional,"net_pnl":None})
+            s["last"]=x["t"]
+        s["status"]="PAPER_ACTIVE" if s["position"] else "WAIT"
+    s["events"]=s["events"][-300:]
+    s["last_check"]=datetime.now(timezone.utc).isoformat()
+    s["last_price"]=b[-1]["c"]
+    s["last_candle"]=b[-1]["t"]
+    STATE.write_text(json.dumps(s,indent=2,ensure_ascii=False)+"\n")
+    print(json.dumps({"status":s["status"],"events":len(s["events"]),"last":s["last"],"pnl":s["realized_pnl"]}))
+if __name__=="__main__":main()
