@@ -1,0 +1,28 @@
+name: BTC V7 comparison
+on:
+  push:
+    branches: [feature/btc-v7-risk-filter]
+  workflow_dispatch:
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        days: [7, 30]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy pandas requests ta ccxt pytest
+      - run: python -m pytest -q test_market_regime_v6.py
+      - name: Compare BTC legacy V6 regime and V7
+        run: python backtest_v6.py --strategy all --periods ${{ matrix.days }} --out results-v7-${{ matrix.days }}d
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-v7-comparison-${{ matrix.days }}d
+          path: results-v7-${{ matrix.days }}d/
+          if-no-files-found: warn
