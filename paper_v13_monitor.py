@@ -24,7 +24,8 @@ def download(period, stamp):
     out=[]
     for x in rows:
         if not x or not x[0].isdigit():continue
-        t=int(x[0]);o,h,l,c=map(float,x[1:5])
+        t=int(x[0]);t=t//1000 if t>=10**14 else t  # normalize microseconds to milliseconds
+        o,h,l,c=map(float,x[1:5])
         if t<=0 or min(o,h,l,c)<=0 or l>min(o,c) or h<max(o,c):
             raise RuntimeError("Invalid OHLC values")
         out.append({"t":t,"o":o,"h":h,"l":l,"c":c})
@@ -65,14 +66,19 @@ def bars():
             raise RuntimeError(f"Missing archived day {d}")
         items.extend(daily)
         d+=timedelta(days=1)
-    by_time={x["t"]:x for x in items}
+    by_time={}
+    for item in items:
+        t=item["t"]
+        if t in by_time and any(abs(item[k]-by_time[t][k])>1e-7 for k in ("o","h","l","c")):
+            raise RuntimeError(f"Conflicting OHLC at {datetime.fromtimestamp(t/1000,timezone.utc).isoformat()}")
+        by_time[t]=item
     candles=sorted(by_time.values(),key=lambda x:x["t"])
     now_ms=int(datetime.now(timezone.utc).timestamp()*1000)
     candles=[x for x in candles if x["t"]+FOUR_HOURS<=now_ms]
     if len(candles)<240:raise RuntimeError("Insufficient official archive history")
     for p,n in zip(candles,candles[1:]):
         if n["t"]-p["t"]!=FOUR_HOURS:
-            raise RuntimeError("Missing or duplicate 4H archive candles; no paper trades")
+            raise RuntimeError(f"4H candle gap: {datetime.fromtimestamp(p['t']/1000,timezone.utc).isoformat()} -> {datetime.fromtimestamp(n['t']/1000,timezone.utc).isoformat()} (delta={(n['t']-p['t'])/3600000:.2f}h); no paper trades")
     # Do not silently treat stale archive data as live trading.
     if now_ms-(candles[-1]["t"]+FOUR_HOURS)>72*3600*1000:
         raise RuntimeError("Archive is stale (>72h); no paper trades")
