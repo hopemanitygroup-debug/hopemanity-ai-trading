@@ -18,6 +18,7 @@ from signal_v7 import decide_v7
 from signal_amd_v71 import decide_amd
 from signal_hybrid_v8 import decide_hybrid
 from signal_fusion_v8 import decide_fusion
+from signal_selective_v81 import decide_selective
 
 FEE = 0.001
 SLIP = 0.0002
@@ -148,11 +149,12 @@ def test(ex, symbol, days, strategy='regime'):
             if len(h) >= 60 and len(m) >= 60 and len(f) >= 60:
                 current_regime = classify(h.iloc[-1])
                 regime_counts[current_regime] += 1
-                if strategy in ('regime', 'v7', 'amd', 'hybrid', 'fusion'):
+                if strategy in ('regime', 'v7', 'amd', 'hybrid', 'fusion', 'selective'):
                     signal_fn = decide_v7 if strategy == 'v7' else decide
                     sig = ((decide_hybrid if strategy == 'hybrid' else decide_amd)(h.iloc[-1], m.iloc[-13:], f.iloc[-1], f.iloc[-2], fee_per_side=FEE, slippage_per_side=SLIP)
                            if strategy in ('amd', 'hybrid') else
                            decide_fusion(h.iloc[-1], m.iloc[-13:], m.iloc[-2], f.iloc[-1], f.iloc[-2], fee_per_side=FEE, slippage_per_side=SLIP) if strategy == 'fusion' else
+                           decide_selective(h.iloc[-1], m.iloc[-13:], m.iloc[-2], f.iloc[-1], f.iloc[-2], fee_per_side=FEE, slippage_per_side=SLIP) if strategy == 'selective' else
                            signal_fn(h.iloc[-1], m.iloc[-1], m.iloc[-2],
                                      f.iloc[-1], f.iloc[-2], fee_per_side=FEE, slippage_per_side=SLIP))
                     if sig.side == 'WAIT':
@@ -195,14 +197,14 @@ def test(ex, symbol, days, strategy='regime'):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default="results-v6")
-    parser.add_argument("--strategy", choices=("regime", "legacy", "v7", "amd", "hybrid", "fusion", "both", "all"), default="both")
+    parser.add_argument("--strategy", choices=("regime", "legacy", "v7", "amd", "hybrid", "fusion", "selective", "both", "all"), default="both")
     parser.add_argument("--periods", type=int, nargs="+", default=PERIODS)
     args = parser.parse_args()
     ex = None  # Historical archive source; no exchange API calls
     results, trades = [], []
     for pair in PAIRS:
         for days in args.periods:
-            for strategy in (('legacy', 'regime', 'v7', 'amd', 'hybrid', 'fusion') if args.strategy == 'all' else ('legacy', 'regime') if args.strategy == 'both' else (args.strategy,)):
+            for strategy in (('legacy', 'regime', 'v7', 'amd', 'hybrid', 'fusion', 'selective') if args.strategy == 'all' else ('legacy', 'regime') if args.strategy == 'both' else (args.strategy,)):
                 print(f'Testing {pair} {days}d {strategy}', flush=True)
                 result, journal = test(ex, pair, days, strategy)
                 results.append(result)
