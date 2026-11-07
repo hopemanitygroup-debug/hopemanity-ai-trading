@@ -15,6 +15,7 @@ import pandas as pd
 import ta
 from market_regime_v6 import decide, classify
 from signal_v7 import decide_v7
+from signal_amd_v71 import decide_amd
 
 FEE = 0.001
 SLIP = 0.0002
@@ -113,7 +114,7 @@ def test(ex, symbol, days, strategy='regime'):
     five, fifteen, hour = frames["5m"], frames["15m"], frames["1h"]
     # Signals at the next 5m open, using only bars already CLOSED by then.
     start = five.index.max() - days * 86400000
-    trades, equity = [], []
+    trades, equity, rejected = [], [], {}
     regime_counts = {k: 0 for k in ('BULL', 'BEAR', 'RANGE', 'TRANSITION', 'UNKNOWN')}
     balance, position = CAPITAL, None
     for t, bar in five.iterrows():
@@ -145,11 +146,14 @@ def test(ex, symbol, days, strategy='regime'):
             if len(h) >= 60 and len(m) >= 60 and len(f) >= 60:
                 current_regime = classify(h.iloc[-1])
                 regime_counts[current_regime] += 1
-                if strategy in ('regime', 'v7'):
+                if strategy in ('regime', 'v7', 'amd'):
                     signal_fn = decide_v7 if strategy == 'v7' else decide
-                    sig = signal_fn(h.iloc[-1], m.iloc[-1], m.iloc[-2],
-                                 f.iloc[-1], f.iloc[-2],
-                                 fee_per_side=FEE, slippage_per_side=SLIP)
+                    sig = (decide_amd(h.iloc[-1], m.iloc[-13:], f.iloc[-1], f.iloc[-2], fee_per_side=FEE, slippage_per_side=SLIP)
+                           if strategy == 'amd' else
+                           signal_fn(h.iloc[-1], m.iloc[-1], m.iloc[-2],
+                                     f.iloc[-1], f.iloc[-2], fee_per_side=FEE, slippage_per_side=SLIP))
+                    if sig.side == 'WAIT':
+                        rejected[sig.reason] = rejected.get(sig.reason, 0) + 1
                     direction = sig.side
                     stop_distance, target_distance = sig.stop_distance, sig.target_distance
                 else:
@@ -182,20 +186,20 @@ def test(ex, symbol, days, strategy='regime'):
     for value in equity:
         peak = max(peak, value)
         dd = max(dd, (peak-value)/peak*100)
-    return dict(strategy=strategy, regime_counts=regime_counts, pair=symbol, days=days, equity=round(e, 2), pnl=round(e-CAPITAL, 2), return_pct=round((e/CAPITAL-1)*100, 3), closed_trades=len(trades), wins=sum(t["net"]>0 for t in trades), win_rate_pct=round(100*sum(t["net"]>0 for t in trades)/len(trades), 2) if trades else 0, max_drawdown_pct=round(dd, 3), fees_closed=round(sum(t["fees"] for t in trades), 2), open_position=bool(position)), trades
+    return dict(strategy=strategy, regime_counts=regime_counts, pair=symbol, days=days, equity=round(e, 2), pnl=round(e-CAPITAL, 2), return_pct=round((e/CAPITAL-1)*100, 3), closed_trades=len(trades), wins=sum(t["net"]>0 for t in trades), win_rate_pct=round(100*sum(t["net"]>0 for t in trades)/len(trades), 2) if trades else 0, max_drawdown_pct=round(dd, 3), fees_closed=round(sum(t["fees"] for t in trades), 2), open_position=bool(position), rejection_reasons=rejected), trades
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", default="results-v6")
-    parser.add_argument("--strategy", choices=("regime", "legacy", "v7", "both", "all"), default="both")
+    parser.add_argument("--strategy", choices=("regime", "legacy", "v7", "amd", "both", "all"), default="both")
     parser.add_argument("--periods", type=int, nargs="+", default=PERIODS)
     args = parser.parse_args()
     ex = None  # Historical archive source; no exchange API calls
     results, trades = [], []
     for pair in PAIRS:
         for days in args.periods:
-            for strategy in (('legacy', 'regime', 'v7') if args.strategy == 'all' else ('legacy', 'regime') if args.strategy == 'both' else (args.strategy,)):
+            for strategy in (('legacy', 'regime', 'v7', 'amd') if args.strategy == 'all' else ('legacy', 'regime') if args.strategy == 'both' else (args.strategy,)):
                 print(f'Testing {pair} {days}d {strategy}', flush=True)
                 result, journal = test(ex, pair, days, strategy)
                 results.append(result)
