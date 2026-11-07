@@ -17,7 +17,13 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install numpy pandas requests ta ccxt pytest
-      - run: python -m pytest -q test_market_regime_v6.py test_amd_v71.py
+      - name: Verify AMD source and tests are present
+        run: |
+          git log -1 --format='%h %s'
+          ls -l signal_amd_v71.py test_amd_v71.py backtest_v6.py
+          python -m py_compile signal_amd_v71.py test_amd_v71.py backtest_v6.py
+      - name: Run V6 and AMD unit tests
+        run: python -m pytest -q test_market_regime_v6.py test_amd_v71.py
       - name: Compare BTC Legacy Regime V7 AMD
         run: python backtest_v6.py --strategy all --periods ${{ matrix.days }} --out results-amd-${{ matrix.days }}d
       - uses: actions/upload-artifact@v4
