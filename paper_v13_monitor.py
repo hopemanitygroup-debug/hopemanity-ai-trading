@@ -1,17 +1,82 @@
 #!/usr/bin/env python3
 """V13.6 server-side PAPER monitor. No API keys or real orders."""
-import json, os, urllib.request
-from datetime import datetime, timezone
+import csv, io, json, urllib.request, urllib.error, zipfile
+from datetime import datetime, timezone, timedelta, date
 from pathlib import Path
 
 STATE=Path("paper-v13-state.json")
-URL="https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=4h&limit=500"
+ARCHIVE="https://data.binance.vision/data/futures/um/{period}/klines/BTCUSDT/4h/BTCUSDT-4h-{stamp}.zip"
+FOUR_HOURS=4*3600*1000
+
+def download(period, stamp):
+    url=ARCHIVE.format(period=period,stamp=stamp)
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url,headers={"User-Agent":"HopeManity-Paper/1.1"}),timeout=30) as response:
+            payload=response.read()
+    except urllib.error.HTTPError as exc:
+        if exc.code==404:
+            return None
+        raise RuntimeError(f"Official Binance archive unavailable: HTTP {exc.code}") from exc
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        filenames=[name for name in archive.namelist() if name.endswith(".csv")]
+        if len(filenames)!=1:raise RuntimeError("Unexpected archive contents")
+        rows=list(csv.reader(io.TextIOWrapper(archive.open(filenames[0]),encoding="utf-8")))
+    out=[]
+    for x in rows:
+        if not x or not x[0].isdigit():continue
+        t=int(x[0]);o,h,l,c=map(float,x[1:5])
+        if t<=0 or min(o,h,l,c)<=0 or l>min(o,c) or h<max(o,c):
+            raise RuntimeError("Invalid OHLC values")
+        out.append({"t":t,"o":o,"h":h,"l":l,"c":c})
+    return out
+
+def month_offset(today,offset):
+    y=today.year;m=today.month+offset
+    while m<=0:y-=1;m+=12
+    while m>12:y+=1;m-=12
+    return y,m
+
 def bars():
-    req=urllib.request.Request(URL,headers={"User-Agent":"HopeManity-Paper/1.0"})
-    with urllib.request.urlopen(req,timeout=25) as r: data=json.load(r)
-    now=int(datetime.now(timezone.utc).timestamp()*1000)
-    return [{"t":int(x[0]),"o":float(x[1]),"h":float(x[2]),"l":float(x[3]),"c":float(x[4])}
-            for x in data if int(x[6])<now]
+    today=datetime.now(timezone.utc).date()
+    items=[]
+    # Four completed months provide EMA200 warm-up. The newest month
+    # may not have a monthly ZIP until the first Monday of next month.
+    for offset in range(-4,0):
+        y,m=month_offset(today,offset)
+        stamp=f"{y:04d}-{m:02d}"
+        monthly=download("monthly",stamp)
+        if monthly is not None:
+            items.extend(monthly)
+        else:
+            d=date(y,m,1)
+            while d.month==m:
+                if d<today:
+                    daily=download("daily",d.isoformat())
+                    if daily is None:raise RuntimeError(f"Missing archived day {d}")
+                    items.extend(daily)
+                d+=timedelta(days=1)
+    first=date(today.year,today.month,1)
+    d=first
+    while d<today:
+        daily=download("daily",d.isoformat())
+        if daily is None:
+            # Archive normally publishes yesterday's file the next day.
+            if d>=today-timedelta(days=2):break
+            raise RuntimeError(f"Missing archived day {d}")
+        items.extend(daily)
+        d+=timedelta(days=1)
+    by_time={x["t"]:x for x in items}
+    candles=sorted(by_time.values(),key=lambda x:x["t"])
+    now_ms=int(datetime.now(timezone.utc).timestamp()*1000)
+    candles=[x for x in candles if x["t"]+FOUR_HOURS<=now_ms]
+    if len(candles)<240:raise RuntimeError("Insufficient official archive history")
+    for p,n in zip(candles,candles[1:]):
+        if n["t"]-p["t"]!=FOUR_HOURS:
+            raise RuntimeError("Missing or duplicate 4H archive candles; no paper trades")
+    # Do not silently treat stale archive data as live trading.
+    if now_ms-(candles[-1]["t"]+FOUR_HOURS)>72*3600*1000:
+        raise RuntimeError("Archive is stale (>72h); no paper trades")
+    return candles
 def indicators(b):
     e=b[0]["c"]; emas=[]; ats=[]
     for i,x in enumerate(b):
@@ -63,6 +128,8 @@ def main():
         s["status"]="PAPER_ACTIVE" if s["position"] else "WAIT"
     s["events"]=s["events"][-300:]
     s["last_check"]=datetime.now(timezone.utc).isoformat()
+    s["data_source"]="Binance official USD-M futures daily/monthly archive (delayed)"
+    s["data_delay_warning"]="Daily archives are published next day; not live execution"
     s["last_price"]=b[-1]["c"]
     s["last_candle"]=b[-1]["t"]
     STATE.write_text(json.dumps(s,indent=2,ensure_ascii=False)+"\n")
