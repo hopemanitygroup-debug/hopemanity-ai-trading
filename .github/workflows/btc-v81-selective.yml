@@ -1,0 +1,36 @@
+name: BTC V8.1 selective 7d 30d 90d
+on:
+  push:
+    branches: [feature/btc-v81-selective]
+  workflow_dispatch:
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        days: [7, 30, 90]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install numpy pandas requests ta ccxt pytest
+      - name: Validate code and run tests
+        run: |
+          python -m py_compile signal_selective_v81.py backtest_v6.py test_selective_v81.py
+          python -m pytest -q test_market_regime_v6.py test_amd_v71.py test_selective_v81.py
+      - name: Backtest BTC V6 baseline
+        run: python backtest_v6.py --strategy regime --periods ${{ matrix.days }} --out results-v6-${{ matrix.days }}d
+      - name: Backtest BTC V8.1 selective
+        run: python backtest_v6.py --strategy selective --periods ${{ matrix.days }} --out results-v81-${{ matrix.days }}d
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: btc-v81-selective-${{ matrix.days }}d
+          path: |
+            results-v6-${{ matrix.days }}d/
+            results-v81-${{ matrix.days }}d/
+          if-no-files-found: warn
