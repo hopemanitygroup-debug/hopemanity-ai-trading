@@ -21,7 +21,7 @@ def test_preserves_v6_without_amd():
     assert evaluate(LONG,WAIT).side=="LONG"
 
 def test_rejects_amd_when_not_25r_after_costs():
-    assert evaluate(WAIT,LONG).side=="WAIT"
+    assert evaluate(WAIT,Signal("BULL","LONG","low reward",1.,2.)).side=="WAIT"
 
 def test_accepts_confirmed_amd():
     assert evaluate(WAIT,Signal("BULL","LONG","sweep",1.,4.)).side=="LONG"
