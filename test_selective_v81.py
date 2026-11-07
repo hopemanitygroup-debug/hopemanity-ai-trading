@@ -15,7 +15,7 @@ def row(**kw):
 
 def evaluate(v6,amd,*,h=None,m=None,f=None):
     with patch("signal_selective_v81.decide_v6",return_value=v6),patch("signal_selective_v81.decide_amd",return_value=amd):
-        return decide_selective(h or row(),pd.DataFrame([vars(m or row()) for _ in range(13)]),row(),f or row(),row())
+        return decide_selective(h or row(close=103.,ema20=102.,ema50=100.),pd.DataFrame([vars(m or row()) for _ in range(13)]),row(),f or row(),row())
 
 def test_preserves_v6_without_amd():
     assert evaluate(LONG,WAIT).side=="LONG"
