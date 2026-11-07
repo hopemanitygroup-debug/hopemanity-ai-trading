@@ -17,7 +17,7 @@ def decide_selective(hour, m15_window, prev15, m5, prev5, *,
     try:
         if not all(math.isfinite(float(getattr(r, k))) for r, keys in (
             (m15, ("close", "atr", "ema20", "ema50", "macdh", "adx")),
-            (m5, ("close", "atr", "high", "low")) for k in keys):
+            (m5, ("close", "atr", "high", "low"))) for k in keys):
             return Signal(regime, "WAIT", "V8.1: incomplete indicators")
         if m15.close <= 0 or m15.atr <= 0 or m5.atr <= 0:
             return Signal(regime, "WAIT", "V8.1: invalid ATR")
