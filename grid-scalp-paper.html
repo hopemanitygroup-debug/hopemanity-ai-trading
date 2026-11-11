@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07120f">
+<title>HopeManity Fast Grid · PAPER</title>
+<style>
+:root{color-scheme:dark;--bg:#07120f;--panel:#10231c;--line:#28513e;--green:#45e3a2;--red:#ff858c;--muted:#9cb9a9;--amber:#ffc66d}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(ellipse at 70% -20%,#164d37 0,transparent 48%),var(--bg);color:#e8fff2;font:14px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{padding:18px max(16px,calc((100% - 1240px)/2));border-bottom:1px solid var(--line);background:#091810d9;position:sticky;top:0;z-index:3;backdrop-filter:blur(12px)}
+main{max-width:1240px;margin:auto;padding:18px}
+h1{font-size:22px;margin:0}h2{font-size:17px;margin:0 0 12px}
+a{color:var(--green);text-decoration:none}.muted,small{color:var(--muted)}
+.topline,.row,.actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:#10231c;color:var(--muted);font-size:12px}
+.dot{width:8px;height:8px;border-radius:50%;background:#7e8983}.dot.good{background:var(--green);box-shadow:0 0 10px #45e3a2aa}.dot.bad{background:var(--red)}
+.notice{margin:14px 0;padding:12px 14px;border:1px solid #876630;border-radius:12px;background:#2a2113;color:#ffdfa4;line-height:1.45}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px;margin:14px 0}
+.metric,.card{background:#0f211a;border:1px solid var(--line);border-radius:14px;padding:14px}
+.metric label{display:block;color:var(--muted);font-size:12px;margin-bottom:7px}.value{font-size:22px;font-weight:750;letter-spacing:.2px}.positive{color:var(--green)}.negative{color:var(--red)}
+.card{margin-bottom:14px}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px}
+label{display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:12px}
+input{width:100%;padding:10px;background:#091710;color:#e8fff2;border:1px solid #315a45;border-radius:8px;font:inherit}
+input:focus{outline:2px solid #45e3a277}
+.actions{justify-content:flex-start;margin-top:12px}
+button{border:1px solid #3d7658;background:#173d2d;color:#fff;border-radius:9px;padding:10px 14px;font:inherit;font-weight:650;cursor:pointer}
+button.primary{background:#20885c;border-color:#3ac98d}button.danger{background:#51242a;border-color:#9d4f56}button:disabled{opacity:.45;cursor:not-allowed}
+#chart{display:block;width:100%;height:220px;background:#091710;border-radius:10px}
+.chart-meta{display:flex;justify-content:space-between;color:var(--muted);font-size:12px;margin:8px 0 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:680px}
+th,td{text-align:left;padding:9px;border-bottom:1px solid #234533;white-space:nowrap}
+th{color:var(--muted);font-weight:600}
+.scroll{overflow:auto}
+.empty{text-align:center;color:var(--muted);padding:22px}
+footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);font-size:12px;line-height:1.5}
+@media(max-width:650px){main{padding:12px}.grid2{grid-template-columns:1fr}.value{font-size:20px}header{padding:14px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<header>
+  <div class="topline">
+    <div>
+      <h1>HopeManity <span class="positive">Fast Grid</span> <small>· PAPER</small></h1>
+      <div class="muted">BTCUSDT · поток сделок Binance · симуляция без реальных ордеров</div>
+    </div>
+    <div class="pill"><span id="statusDot" class="dot"></span><span id="connectionStatus">Не запущен</span></div>
+  </div>
+</header>
+<main>
+  <div class="notice"><strong>Только PAPER.</strong> Страница получает публичные котировки BTCUSDT и ведёт виртуальную торговлю. Она не подключается к аккаунту Binance и не отправляет ордера. Сделки исполняются по последней цене с заданными комиссиями и проскальзыванием.</div>
+
+  <section class="metrics">
+    <div class="metric"><label>BTCUSDT</label><div class="value" id="price">—</div><small id="feedLag">Ожидание котировки</small></div>
+    <div class="metric"><label>Виртуальная equity</label><div class="value" id="equity">—</div><small id="balanceLabel">Баланс PAPER</small></div>
+    <div class="metric"><label>Чистый PAPER P&amp;L</label><div class="value" id="pnl">—</div><small>С учётом заданных комиссий и проскальзывания</small></div>
+    <div class="metric"><label>Открытые ордера</label><div class="value" id="openCount">0</div><small id="openExposure">Экспозиция $0</small></div>
+    <div class="metric"><label>Ожидающие уровни</label><div class="value" id="pendingCount">0</div><small id="pendingDetail">Buy 0 · Sell 0</small></div>
+    <div class="metric"><label>Закрыто за минуту</label><div class="value" id="closedPerMinute">0</div><small id="basketsPerMinute">Корзин: 0</small></div>
+  </section>
+
+  <section class="card">
+    <div class="row"><h2>Поток цены</h2><span class="pill" id="effectiveStep">Шаг сетки: —</span></div>
+    <canvas id="chart"></canvas>
+    <div class="chart-meta"><span>Последние тики BTCUSDT</span><span id="lastTick">Последний тик: —</span></div>
+  </section>
+
+  <section class="card">
+    <h2>Настройки PAPER-симуляции</h2>
+    <div class="controls">
+      <label>Виртуальный баланс, USDT<input id="balanceInput" type="number" min="100" step="100" value="100000"></label>
+      <label>Размер одного уровня, USDT<input id="orderSizeInput" type="number" min="5" step="5" value="250"></label>
+      <label>Уровней на сторону<input id="levelsInput" type="number" min="1" max="20" step="1" value="20"></label>
+      <label>Шаг сетки, базисных пунктов<input id="stepInput" type="number" min="1" step="1" value="20"></label>
+      <label>Комиссия за сторону, б.п.<input id="feeInput" type="number" min="0" step="0.5" value="5"></label>
+      <label>Проскальзывание за сторону, б.п.<input id="slippageInput" type="number" min="0" step="0.5" value="2"></label>
+      <label>Цель корзины после издержек, б.п.<input id="targetInput" type="number" min="1" step="1" value="5"></label>
+      <label>Макс. убыток корзины, % баланса<input id="basketLossInput" type="number" min="0.1" step="0.1" value="0.5"></label>
+      <label>Остановка сессии при убытке, %<input id="sessionLossInput" type="number" min="0.5" step="0.5" value="2"></label>
+      <label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="100" step="1" value="20"></label>
+    </div>
+    <p class="muted" id="costNote">Шаг сетки не будет меньше расчётного порога издержек. 1 б.п. = 0,01%.</p>
+    <div class="actions">
+      <button class="primary" id="startButton">Запустить PAPER</button>
+      <button id="stopButton" disabled>Остановить</button>
+      <button id="flattenButton">Закрыть виртуальные корзины</button>
+      <button class="danger" id="resetButton">Сбросить симуляцию</button>
+    </div>
+    <p class="muted">Виртуальный размер уровня фиксирован и не увеличивается после убытка. Лимит сетки — 20 уровней Buy Stop и 20 Sell Stop. Настройки блокируются на время работы; после перезагрузки страницы журнал сбрасывается.</p>
+  </section>
+
+  <section class="grid2">
+    <div class="card"><h2>Корзина LONG</h2><div class="row"><span id="longState" class="muted">Уровни не выставлены</span><strong id="longPnl">—</strong></div></div>
+    <div class="card"><h2>Корзина SHORT</h2><div class="row"><span id="shortState" class="muted">Уровни не выставлены</span><strong id="shortPnl">—</strong></div></div>
+  </section>
+
+  <section class="card">
+    <div class="row"><h2>Журнал виртуальных ордеров</h2><span class="muted" id="eventCount">0 событий</span></div>
+    <div class="scroll"><table><thead><tr><th>Время</th><th>Событие</th><th>Сторона</th><th>Цена</th><th>Ордеров</th><th>P&amp;L корзины</th><th>Причина</th></tr></thead><tbody id="journal"><tr><td colspan="7" class="empty">Запусти PAPER, чтобы начать сбор тиков и симуляцию.</td></tr></tbody></table></div>
+  </section>
+</main>
+<footer>Учебная симуляция на потоке публичных сделок, а не точная модель биржевого исполнения. Нет данных книги ордеров, очереди заявок, частичного исполнения, funding и задержки реального ордера. Результаты PAPER не гарантируют такие же результаты в реальной торговле.</footer>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var FEED = "wss://stream.binance.com:9443/ws/btcusdt@trade";
+  var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
+  var cfg=null, state=null, orderId=0, uiTimer=0;
+  var sideNames={long:"LONG",short:"SHORT"};
+
+  function blankState(balance){
+    return {
+      startBalance:balance,realized:0,lastPrice:0,lastTradeTime:0,lastTickAt:0,
+      tickCount:0,events:[],prices:[],closedOrderTimes:[],closedBasketTimes:[],
+      sides:{long:{pending:[],positions:[],center:0},short:{pending:[],positions:[],center:0}},
+      initialized:false,halted:false,haltReason:""
+    };
+  }
+  function readConfig(){
+    var c={
+      startBalance:Number($("balanceInput").value),
+      orderNotional:Number($("orderSizeInput").value),
+      levels:Math.floor(Number($("levelsInput").value)),
+      stepBps:Number($("stepInput").value),
+      feeBps:Number($("feeInput").value),
+      slipBps:Number($("slippageInput").value),
+      targetBps:Number($("targetInput").value),
+      basketLossPct:Number($("basketLossInput").value),
+      sessionLossPct:Number($("sessionLossInput").value),
+      exposurePct:Number($("exposureInput").value)
+    };
+    var vals=Object.keys(c).map(function(k){return c[k];});
+    if(vals.some(function(x){return !Number.isFinite(x);}) ||
+       c.startBalance<=0 || c.orderNotional<=0 || c.levels<1 || c.levels>20 ||
+       c.stepBps<=0 || c.feeBps<0 || c.slipBps<0 || c.targetBps<=0 ||
+       c.basketLossPct<=0 || c.sessionLossPct<=0 || c.exposurePct<=0 || c.exposurePct>100){
+      throw new Error("Проверь настройки: значения должны быть положительными, уровней — от 1 до 20.");
+    }
+    c.effectiveStepBps=Math.max(c.stepBps,2*c.feeBps+2*c.slipBps+c.targetBps);
+    c.feeRate=c.feeBps/10000;
+    c.slipRate=c.slipBps/10000;
+    return c;
+  }
+  function money(x){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(x);}
+  function priceText(x){return x>0?new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}).format(x):"—";}
+  function timeText(ms){return new Date(ms).toLocaleTimeString("ru-RU",{hour12:false});}
+  function addEvent(type,side,price,count,pnl,reason,ts){
+    state.events.unshift({time:ts||Date.now(),type:type,side:side||"—",price:price||0,count:count||0,pnl:pnl,reason:reason||""});
+    if(state.events.length>150)state.events.length=150;
+  }
+  function currentExposure(){
+    var total=0;
+    ["long","short"].forEach(function(s){
+      state.sides[s].positions.forEach(function(p){total+=p.notional;});
+    });
+    return total;
+  }
+  function sideNotional(s){
+    return state.sides[s].positions.reduce(function(a,p){return a+p.notional;},0);
+  }
+  function markedPositionPnl(p,marketPrice){
+    var exitPrice=p.side==="long"?marketPrice*(1-cfg.slipRate):marketPrice*(1+cfg.slipRate);
+    var gross=p.side==="long"?p.qty*(exitPrice-p.entryPrice):p.qty*(p.entryPrice-exitPrice);
+    var exitFee=p.qty*exitPrice*cfg.feeRate;
+    return gross-p.entryFee-exitFee;
+  }
+  function basketPnl(s,marketPrice){
+    return state.sides[s].positions.reduce(function(a,p){return a+markedPositionPnl(p,marketPrice);},0);
+  }
+  function basketTarget(s){
+    return sideNotional(s)*cfg.targetBps/10000;
+  }
+  function placeGrid(s,center){
+    var dir=s==="long"?1:-1,side=state.sides[s];
+    side.center=center;side.pending=[];
+    for(var i=1;i<=cfg.levels;i++){
+      side.pending.push({level:i,price:center*(1+dir*cfg.effectiveStepBps*i/10000)});
+    }
+  }
+  function initGrids(price,ts){
+    state.initialized=true;
+    placeGrid("long",price);placeGrid("short",price);
+    addEvent("Сетка выставлена","LONG / SHORT",price,cfg.levels*2,null,"Buy Stop и Sell Stop",ts);
+  }
+  function triggerLevel(s,price,level,ts){
+    var maxExposure=(state.startBalance+state.realized)*cfg.exposurePct/100;
+    if(currentExposure()+cfg.orderNotional>maxExposure){
+      addEvent("Пропуск уровня",sideNames[s],price,1,null,"Достигнут предел экспозиции",ts);
+      return false;
+    }
+    var fillBase=s==="long"?Math.max(price,level.price):Math.min(price,level.price);
+    var fill=s==="long"?fillBase*(1+cfg.slipRate):fillBase*(1-cfg.slipRate);
+    var notional=cfg.orderNotional,qty=notional/fill,entryFee=notional*cfg.feeRate;
+    state.sides[s].positions.push({id:++orderId,side:s,qty:qty,notional:notional,entryPrice:fill,entryFee:entryFee,openedAt:ts,level:level.level});
+    return true;
+  }
+  function processEntries(s,price,ts){
+    var side=state.sides[s],remain=[],opened=0,skipped=0;
+    side.pending.forEach(function(level){
+      var hit=s==="long"?price>=level.price:price<=level.price;
+      if(!hit){remain.push(level);return;}
+      if(triggerLevel(s,price,level,ts))opened++;else skipped++;
+    });
+    side.pending=remain;
+    if(opened)addEvent("Открыта сетка",sideNames[s],price,opened,null,"Сработали уровни; объём фиксированный",ts);
+    if(skipped)addEvent("Уровни пропущены",sideNames[s],price,skipped,null,"Лимит риска",ts);
+  }
+  function closeBasket(s,price,reason,ts){
+    var side=state.sides[s],positions=side.positions;
+    if(!positions.length)return 0;
+    var sum=0;
+    positions.forEach(function(p){
+      var net=markedPositionPnl(p,price);
+      sum+=net;state.closedOrderTimes.push(Date.now());
+    });
+    state.realized+=sum;
+    state.closedBasketTimes.push(Date.now());
+    var n=positions.length;
+    side.positions=[];
+    addEvent("Закрыта корзина",sideNames[s],price,n,sum,reason,ts);
+    placeGrid(s,price);
+    return sum;
+  }
+  function checkBaskets(price,ts){
+    ["long","short"].forEach(function(s){
+      var positions=state.sides[s].positions;
+      if(!positions.length)return;
+      var net=basketPnl(s,price),target=basketTarget(s);
+      var maxLoss=state.startBalance*cfg.basketLossPct/100;
+      if(net>=target)closeBasket(s,price,"Цель корзины после издержек",ts);
+      else if(net<=-maxLoss)closeBasket(s,price,"Лимит убытка корзины",ts);
+    });
+    if(!state.halted && state.realized<=-state.startBalance*cfg.sessionLossPct/100){
+      ["long","short"].forEach(function(s){if(state.sides[s].positions.length)closeBasket(s,price,"Остановка по лимиту сессии",ts);});
+      state.halted=true;state.haltReason="Достигнут лимит убытка сессии";
+      addEvent("PAPER остановлен","—",price,0,state.realized,state.haltReason,ts);
+      stopPaper(true);
+    }
+  }
+  function onTrade(price,ts){
+    state.lastPrice=price;state.lastTradeTime=ts;state.lastTickAt=Date.now();state.tickCount++;
+    state.prices.push(price);if(state.prices.length>240)state.prices.shift();
+    if(!state.initialized)initGrids(price,ts);
+    else if(running && !state.halted){
+      checkBaskets(price,ts);
+      if(running && !state.halted){processEntries("long",price,ts);processEntries("short",price,ts);}
+    }
+    var now=Date.now();
+    if(now-uiTimer>200){uiTimer=now;render();}
+  }
+  function setStatus(text,mode){
+    $("connectionStatus").textContent=text;
+    $("statusDot").className="dot"+(mode?" "+mode:"");
+  }
+  function connect(){
+    if(!running)return;
+    setStatus("Подключение к потоку…","");
+    try{
+      var ws=new WebSocket(FEED);socket=ws;
+      ws.onopen=function(){if(!running){ws.close();return;}connected=true;reconnectDelay=1000;setStatus("Поток подключён","good");render();};
+      ws.onmessage=function(event){
+        if(!running)return;
+        try{
+          var data=JSON.parse(event.data),price=Number(data.p),ts=Number(data.T||Date.now());
+          if(Number.isFinite(price)&&price>0)onTrade(price,ts);
+        }catch(e){}
+      };
+      ws.onerror=function(){setStatus("Ошибка потока; переподключение…","bad");};
+      ws.onclose=function(){
+        if(socket===ws)socket=null;connected=false;
+        if(running){setStatus("Поток прерван; переподключение…","bad");scheduleReconnect();}
+        else if(!state.halted)setStatus("Остановлен","");render();
+      };
+    }catch(e){setStatus("Не удалось открыть поток","bad");scheduleReconnect();}
+  }
+  function scheduleReconnect(){
+    if(!running||reconnectTimer)return;
+    var wait=reconnectDelay;reconnectDelay=Math.min(30000,reconnectDelay*2);
+    reconnectTimer=setTimeout(function(){reconnectTimer=null;connect();},wait);
+  }
+  function stopPaper(fromRisk){
+    running=false;connected=false;
+    if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}
+    var old=socket;socket=null;
+    if(old){try{old.close();}catch(e){}}
+    if(!fromRisk&&!state.halted)setStatus("Остановлен","");
+    $("startButton").disabled=false;$("stopButton").disabled=true;
+    lockInputs(false);render();
+  }
+  function lockInputs(lock){
+    ["balanceInput","orderSizeInput","levelsInput","stepInput","feeInput","slippageInput","targetInput","basketLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=lock;});
+  }
+  function startPaper(){
+    if(running)return;
+    try{cfg=readConfig();}catch(e){alert(e.message);return;}
+    if(state.halted){alert("Сессия остановлена по лимиту убытка. Сбрось симуляцию, чтобы начать заново.");return;}
+    if(!state.initialized)state=blankState(cfg.startBalance);
+    else if(Math.abs(cfg.startBalance-state.startBalance)>0.001){alert("Баланс PAPER уже задан. Сбрось симуляцию, чтобы изменить его.");return;}
+    running=true;reconnectDelay=1000;lockInputs(true);
+    $("startButton").disabled=true;$("stopButton").disabled=false;
+    connect();render();
+  }
+  function flattenAll(reason){
+    if(!state.lastPrice)return;
+    ["long","short"].forEach(function(s){if(state.sides[s].positions.length)closeBasket(s,state.lastPrice,reason,Date.now());});
+    render();
+  }
+  function resetPaper(){
+    stopPaper(false);
+    var balance=Number($("balanceInput").value);
+    if(!Number.isFinite(balance)||balance<=0){alert("Укажи положительный виртуальный баланс.");return;}
+    cfg=null;state=blankState(balance);orderId=0;
+    $("startButton").disabled=false;$("stopButton").disabled=true;
+    setStatus("Не запущен","");
+    render();
+  }
+  function pruneTimes(arr,now){
+    while(arr.length&&now-arr[0]>60000)arr.shift();
+  }
+  function render(){
+    if(!state)return;
+    var price=state.lastPrice,open=0,floating=0,pendingLong=state.sides.long.pending.length,pendingShort=state.sides.short.pending.length;
+    ["long","short"].forEach(function(s){open+=state.sides[s].positions.length;if(price)floating+=basketPnl(s,price);});
+    var equity=state.startBalance+state.realized+floating,totalPnl=state.realized+floating;
+    $("price").textContent=price?priceText(price):"—";
+    $("equity").textContent=money(equity);$("balanceLabel").textContent="Баланс "+money(state.startBalance+state.realized);
+    $("pnl").textContent=money(totalPnl);$("pnl").className="value "+(totalPnl>=0?"positive":"negative");
+    $("equity").className="value "+(equity>=state.startBalance?"positive":"");
+    $("openCount").textContent=String(open);$("openExposure").textContent="Экспозиция "+money(currentExposure());
+    $("pendingCount").textContent=String(pendingLong+pendingShort);
+    $("pendingDetail").textContent="Buy Stop "+pendingLong+" · Sell Stop "+pendingShort;
+    var now=Date.now();pruneTimes(state.closedOrderTimes,now);pruneTimes(state.closedBasketTimes,now);
+    $("closedPerMinute").textContent=String(state.closedOrderTimes.length);
+    $("basketsPerMinute").textContent="Корзин закрыто: "+state.closedBasketTimes.length;
+    var currentStep=cfg?cfg.effectiveStepBps:0;
+    $("effectiveStep").textContent=currentStep?"Эффективный шаг: "+currentStep.toFixed(1)+" б.п. ("+(currentStep/100).toFixed(3)+"%)":"Шаг сетки: —";
+    $("longPnl").textContent=price?money(basketPnl("long",price)):"—";
+    $("shortPnl").textContent=price?money(basketPnl("short",price)):"—";
+    $("longPnl").className=basketPnl("long",price)>=0?"positive":"negative";
+    $("shortPnl").className=basketPnl("short",price)>=0?"positive":"negative";
+    $("longState").textContent=state.sides.long.positions.length+" открыто · "+pendingLong+" ожидает";
+    $("shortState").textContent=state.sides.short.positions.length+" открыто · "+pendingShort+" ожидает";
+    $("feedLag").textContent=state.lastTickAt?"Тиков получено: "+state.tickCount+" · задержка данных "+Math.max(0,Date.now()-state.lastTradeTime)+" мс":"Ожидание котировки";
+    $("lastTick").textContent=state.lastTickAt?"Последний тик: "+timeText(state.lastTickAt):"Последний тик: —";
+    $("eventCount").textContent=state.events.length+" событий";
+    renderJournal();drawChart();
+  }
+  function renderJournal(){
+    var body=$("journal");
+    if(!state.events.length){body.innerHTML='<tr><td colspan="7" class="empty">Пока нет событий.</td></tr>';return;}
+    body.innerHTML=state.events.slice(0,80).map(function(e){
+      var side=e.side==="LONG"?"LONG":e.side==="SHORT"?"SHORT":e.side;
+      var pnl=e.pnl===null?"—":'<span class="'+(e.pnl>=0?"positive":"negative")+'">'+money(e.pnl)+'</span>';
+      return "<tr><td>"+timeText(e.time)+"</td><td>"+e.type+"</td><td>"+side+"</td><td>"+(e.price?priceText(e.price):"—")+"</td><td>"+e.count+"</td><td>"+pnl+"</td><td>"+e.reason+"</td></tr>";
+    }).join("");
+  }
+  function drawChart(){
+    var canvas=$("chart"),rect=canvas.getBoundingClientRect(),dpr=window.devicePixelRatio||1;
+    if(!rect.width)return;
+    var w=Math.floor(rect.width*dpr),h=Math.floor(220*dpr);
+    if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
+    var ctx=canvas.getContext("2d");ctx.clearRect(0,0,w,h);
+    var values=state.prices;if(values.length<2)return;
+    var min=Math.min.apply(null,values),max=Math.max.apply(null,values),range=max-min||1;
+    ctx.strokeStyle="#254d3a";ctx.lineWidth=1*dpr;
+    for(var i=1;i<4;i++){var y=h*i/4;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+    ctx.strokeStyle="#45e3a2";ctx.lineWidth=2*dpr;ctx.beginPath();
+    values.forEach(function(v,i){var x=i/(values.length-1)*w,y=h-8*dpr-(v-min)/(range)*(h-16*dpr);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});
+    ctx.stroke();
+  }
+  $("startButton").addEventListener("click",startPaper);
+  $("stopButton").addEventListener("click",function(){stopPaper(false);});
+  $("flattenButton").addEventListener("click",function(){flattenAll("Закрыто вручную в PAPER");});
+  $("resetButton").addEventListener("click",function(){resetPaper();});
+  window.addEventListener("resize",function(){drawChart();});
+  state=blankState(Number($("balanceInput").value)||100000);
+  render();
+})();
+</script>
+</body>
+</html>
