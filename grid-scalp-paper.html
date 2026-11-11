@@ -160,6 +160,13 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     });
     return total;
   }
+  function currentFloating(){
+    if(!state||!state.lastPrice||!cfg)return 0;
+    return basketPnl("long",state.lastPrice)+basketPnl("short",state.lastPrice);
+  }
+  function currentEquity(){
+    return state.startBalance+state.realized+currentFloating();
+  }
   function sideNotional(s){
     return state.sides[s].positions.reduce(function(a,p){return a+p.notional;},0);
   }
@@ -188,7 +195,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     addEvent("Сетка выставлена","LONG / SHORT",price,cfg.levels*2,null,"Buy Stop и Sell Stop",ts);
   }
   function triggerLevel(s,price,level,ts){
-    var maxExposure=(state.startBalance+state.realized)*cfg.exposurePct/100;
+    var maxExposure=Math.max(0,currentEquity()*cfg.exposurePct/100);
     if(currentExposure()+cfg.orderNotional>maxExposure){
       addEvent("Пропуск уровня",sideNames[s],price,1,null,"Достигнут предел экспозиции",ts);
       return false;
@@ -235,10 +242,10 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       if(net>=target)closeBasket(s,price,"Цель корзины после издержек",ts);
       else if(net<=-maxLoss)closeBasket(s,price,"Лимит убытка корзины",ts);
     });
-    if(!state.halted && state.realized<=-state.startBalance*cfg.sessionLossPct/100){
+    if(!state.halted && state.realized+currentFloating()<=-state.startBalance*cfg.sessionLossPct/100){
       ["long","short"].forEach(function(s){if(state.sides[s].positions.length)closeBasket(s,price,"Остановка по лимиту сессии",ts);});
       state.halted=true;state.haltReason="Достигнут лимит убытка сессии";
-      addEvent("PAPER остановлен","—",price,0,state.realized,state.haltReason,ts);
+      addEvent("PAPER остановлен","—",price,0,state.realized+currentFloating(),state.haltReason,ts);
       stopPaper(true);
     }
   }
@@ -290,7 +297,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     if(old){try{old.close();}catch(e){}}
     if(!fromRisk&&!state.halted)setStatus("Остановлен","");
     $("startButton").disabled=false;$("stopButton").disabled=true;
-    lockInputs(false);render();
+    lockInputs(state.initialized&&!state.halted);render();
   }
   function lockInputs(lock){
     ["balanceInput","orderSizeInput","levelsInput","stepInput","feeInput","slippageInput","targetInput","basketLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=lock;});
@@ -315,6 +322,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     var balance=Number($("balanceInput").value);
     if(!Number.isFinite(balance)||balance<=0){alert("Укажи положительный виртуальный баланс.");return;}
     cfg=null;state=blankState(balance);orderId=0;
+    lockInputs(false);
     $("startButton").disabled=false;$("stopButton").disabled=true;
     setStatus("Не запущен","");
     render();
