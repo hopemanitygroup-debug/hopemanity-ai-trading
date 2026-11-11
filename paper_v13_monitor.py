@@ -32,33 +32,39 @@ def download(period, stamp):
     return out
 
 def fetch_missing_futures_klines(start_ms, end_ms):
-    """Recover exact BTCUSDT USD-M 4H bars from Binance public market-data API."""
-    from urllib.parse import urlencode
-    hosts=("https://data-api.binance.vision", "https://fapi.binance.com")
-    query=urlencode({"symbol":"BTCUSDT","interval":"4h","startTime":start_ms,
-                     "endTime":end_ms-1,"limit":1500})
-    failures=[]
-    for host in hosts:
-        url=f"{host}/fapi/v1/klines?{query}"
-        try:
-            req=urllib.request.Request(url,headers={"User-Agent":"HopeManity-Paper/1.2"})
-            with urllib.request.urlopen(req,timeout=20) as response:
-                payload=json.load(response)
-            if not isinstance(payload,list):raise ValueError("Unexpected API response")
-            recovered=[]
-            for row in payload:
-                t=int(row[0]);o,h,l,close=map(float,row[1:5])
-                if t<start_ms or t>=end_ms or min(o,h,l,close)<=0 or l>min(o,close) or h<max(o,close):
-                    raise ValueError("Invalid recovery OHLC or timestamp")
-                recovered.append({"t":t,"o":o,"h":h,"l":l,"c":close})
-            expected=list(range(start_ms,end_ms,FOUR_HOURS))
-            if [x["t"] for x in recovered]!=expected:
-                raise ValueError(f"Expected {len(expected)} consecutive 4H bars, got {len(recovered)}")
-            print(f"Recovered {len(recovered)} missing futures 4H bars from {host}")
-            return recovered
-        except (urllib.error.URLError,ValueError,TimeoutError) as exc:
-            failures.append(f"{host}: {exc}")
-    raise RuntimeError("Cannot safely recover missing USD-M futures bars: "+"; ".join(failures))
+    """Recover exact BTCUSDT USD-M 4H bars from official Binance archive data.
+
+    The live futures REST API is not reliable from GitHub-hosted runners and may
+    return 404/451 responses. The public archive ZIPs are the same source used by
+    the monitor for validating official market history, so they are the safer
+    recovery path for missing 4h candles.
+    """
+    if start_ms % FOUR_HOURS or end_ms % FOUR_HOURS or start_ms >= end_ms:
+        raise RuntimeError(f"Invalid recovery window: {start_ms} -> {end_ms}")
+
+    expected=list(range(start_ms,end_ms,FOUR_HOURS))
+    first_day=datetime.fromtimestamp(start_ms/1000,timezone.utc).date()
+    last_day=datetime.fromtimestamp((end_ms-1)/1000,timezone.utc).date()
+
+    recovered_by_time={}
+    day=first_day
+    while day<=last_day:
+        daily=download("daily",day.isoformat())
+        if daily is None:
+            raise RuntimeError(f"Official Binance archive missing day {day}")
+        for bar in daily:
+            if start_ms <= bar["t"] < end_ms:
+                if bar["t"] in recovered_by_time:
+                    raise RuntimeError(f"Duplicate recovery candle at {bar['t']}")
+                recovered_by_time[bar["t"]]=bar
+        day += timedelta(days=1)
+
+    recovered=sorted(recovered_by_time.values(),key=lambda x:x["t"])
+    if [x["t"] for x in recovered]!=expected:
+        raise RuntimeError(f"Archive recovery incomplete: expected {len(expected)} bars, got {len(recovered)}")
+
+    print(f"Recovered {len(recovered)} missing futures 4H bars from official archives")
+    return recovered
 
 def month_offset(today,offset):
     y=today.year;m=today.month+offset
@@ -131,7 +137,7 @@ def indicators(b):
     for i,x in enumerate(b):
         e+=2/201*(x["c"]-e);emas.append(e)
         terms=[max(b[j]["h"]-b[j]["l"],abs(b[j]["h"]-b[j-1]["c"]),abs(b[j]["l"]-b[j-1]["c"]))
-               for j in range(max(1,i-13),i+1)]
+                for j in range(max(1,i-13),i+1)]
         ats.append(sum(terms)/len(terms) if terms else x["h"]-x["l"])
     return emas,ats
 def initial():
