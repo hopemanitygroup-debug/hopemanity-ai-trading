@@ -51,13 +51,13 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </div>
 </header>
 <main>
-  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Все открытые позиции учитываются общей корзиной: она закрывается при чистом P/L выше нуля (порог $0,01) или при убытке −$10 после комиссии и проскальзывания. Реальные ордера не отправляются.</div>
+  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Одновременно допускается максимум 40 открытых позиций: до 20 LONG и до 20 SHORT. Общая корзина закрывается при чистом P/L выше нуля (порог $0,01) или при убытке −$10 после комиссии и проскальзывания. Реальные ордера не отправляются.</div>
 
   <section class="metrics">
     <div class="metric"><label>BTCUSDT</label><div class="value" id="price">—</div><small id="feedLag">Ожидание котировки</small></div>
     <div class="metric"><label>Виртуальная equity</label><div class="value" id="equity">—</div><small id="balanceLabel">Баланс PAPER</small></div>
     <div class="metric"><label>Чистый PAPER P&amp;L</label><div class="value" id="pnl">—</div><small>С учётом заданных комиссий и проскальзывания</small></div>
-    <div class="metric"><label>Открытые ордера</label><div class="value" id="openCount">0</div><small id="openExposure">Экспозиция $0</small></div>
+    <div class="metric"><label>Открытые позиции</label><div class="value" id="openCount">0 / 40</div><small id="openExposure">Экспозиция $0</small></div>
     <div class="metric"><label>Ожидающие уровни</label><div class="value" id="pendingCount">0</div><small id="pendingDetail">Buy 0 · Sell 0</small></div>
     <div class="metric"><label>Позиций закрыто за минуту</label><div class="value" id="closedPerMinute">0</div><small id="basketsPerMinute">Закрыто позиций: 0</small></div>
   </section>
@@ -121,6 +121,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
   var cfg=null, state=null, orderId=0, uiTimer=0;
   var sideNames={long:"LONG",short:"SHORT"};
+  var MAX_OPEN_PER_SIDE=20, MAX_OPEN_TOTAL=40;
 
   function blankState(balance){
     return {
@@ -258,6 +259,10 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     addEvent("Сетка выставлена","LONG / SHORT",price,cfg.levels*2,null,"Buy Stop выше центра; Sell Stop ниже",ts);
   }
   function triggerLevel(s,price,level,ts){
+    if(openPositionCount()>=MAX_OPEN_TOTAL || state.sides[s].positions.length>=MAX_OPEN_PER_SIDE){
+      addEvent("Пропуск уровня",sideNames[s],price,1,null,"Достигнут предел: 40 позиций всего, максимум 20 на сторону",ts);
+      return false;
+    }
     var fillBase=s==="long"?Math.max(price,level.price):Math.min(price,level.price);
     var fill=s==="long"?fillBase*(1+cfg.slipRate):fillBase*(1-cfg.slipRate);
     var qty=cfg.orderQty,notional=qty*fill;
@@ -381,6 +386,10 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     if(running)return;
     try{cfg=readConfig();}catch(e){alert(e.message);return;}
     if(state.halted){alert("Сессия остановлена по лимиту убытка. Сбрось симуляцию, чтобы начать заново.");return;}
+    if(openPositionCount()>MAX_OPEN_TOTAL || state.sides.long.positions.length>MAX_OPEN_PER_SIDE || state.sides.short.positions.length>MAX_OPEN_PER_SIDE){
+      alert("В сохранённой сессии уже больше лимита: максимум 40 открытых позиций, по 20 LONG и SHORT. Сначала сохрани журнал, затем закрой виртуальную корзину или сбрось симуляцию.");
+      return;
+    }
     if(!state.initialized)state=blankState(cfg.startBalance);
     else if(Math.abs(cfg.startBalance-state.startBalance)>0.001){alert("Баланс PAPER уже задан. Сбрось симуляцию, чтобы изменить его.");return;}
     running=true;reconnectDelay=1000;lockInputs(true);
@@ -414,7 +423,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("equity").textContent=money(equity);$("balanceLabel").textContent="Баланс "+money(state.startBalance+state.realized);
     $("pnl").textContent=money(totalPnl);$("pnl").className="value "+(totalPnl>=0?"positive":"negative");
     $("equity").className="value "+(equity>=state.startBalance?"positive":"");
-    $("openCount").textContent=String(open);$("openExposure").textContent="Экспозиция "+money(currentExposure());
+    $("openCount").textContent=String(open)+" / "+MAX_OPEN_TOTAL;$("openExposure").textContent="Экспозиция "+money(currentExposure());
     $("pendingCount").textContent=String(pendingLong+pendingShort);
     $("pendingDetail").textContent="Buy Stop "+pendingLong+" · Sell Stop "+pendingShort;
     var now=Date.now();pruneTimes(state.closedOrderTimes,now);pruneTimes(state.closedBasketTimes,now);
@@ -429,8 +438,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("shortPnl").textContent=price?money(basketPnl("short",price)):"—";
     $("longPnl").className=basketPnl("long",price)>=0?"positive":"negative";
     $("shortPnl").className=basketPnl("short",price)>=0?"positive":"negative";
-    $("longState").textContent=state.sides.long.positions.length+" открыто · "+pendingLong+" ожидает";
-    $("shortState").textContent=state.sides.short.positions.length+" открыто · "+pendingShort+" ожидает";
+    $("longState").textContent=state.sides.long.positions.length+" / "+MAX_OPEN_PER_SIDE+" открыто · "+pendingLong+" ожидает";
+    $("shortState").textContent=state.sides.short.positions.length+" / "+MAX_OPEN_PER_SIDE+" открыто · "+pendingShort+" ожидает";
     $("feedLag").textContent=state.lastTickAt?"Тиков получено: "+state.tickCount+" · задержка данных "+Math.max(0,Date.now()-state.lastTradeTime)+" мс":"Ожидание котировки";
     $("lastTick").textContent=state.lastTickAt?"Последний тик: "+timeText(state.lastTickAt):"Последний тик: —";
     $("eventCount").textContent=state.events.length+" событий";
