@@ -88,9 +88,10 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       <button class="primary" id="startButton">Запустить PAPER</button>
       <button id="stopButton" disabled>Остановить</button>
       <button id="flattenButton">Закрыть виртуальные корзины</button>
+      <button id="exportButton">Сохранить сессию JSON</button>
       <button class="danger" id="resetButton">Сбросить симуляцию</button>
     </div>
-    <p class="muted">Размер ордера считается автоматически от баланса, но ограничен максимальным лотом на уровень. Сетка обновляется раз в секунду вокруг последней цены; до 20 уровней на каждой стороне. Когда общий результат открытых позиций достигает TP или стоп-лосса, вся корзина закрывается по текущей цене. История журнала сохраняется на этом устройстве; открытые позиции после перезагрузки PAPER не восстанавливаются.</p>
+    <p class="muted">Размер ордера считается автоматически от баланса, но ограничен максимальным лотом на уровень. Сетка обновляется раз в секунду вокруг последней цены; до 20 уровней на каждой стороне. Настройки, журнал, открытые позиции и ожидающие уровни автоматически сохраняются в этом браузере, но PAPER после перезагрузки остаётся остановленным. Кнопка JSON сохраняет резервную копию сессии в файл.</p>
   </section>
 
   <section class="grid2">
@@ -116,6 +117,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   var $ = function(id){ return document.getElementById(id); };
   var FEED = "wss://stream.binance.com:9443/ws/btcusdt@trade";
   var LOG_KEY = "hopemanity_csv_stop_grid_events_v2";
+  var SESSION_KEY = "hopemanity_csv_stop_grid_session_v1";
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
   var cfg=null, state=null, orderId=0, uiTimer=0;
   var sideNames={long:"LONG",short:"SHORT"};
@@ -158,10 +160,49 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function money(x){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(x);}
   function priceText(x){return x>0?new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}).format(x):"—";}
   function timeText(ms){return new Date(ms).toLocaleTimeString("ru-RU",{hour12:false});}
+  function settingsSnapshot(){
+    var ids=["balanceInput","orderSizeInput","maxOrderQtyInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"];
+    var settings={};ids.forEach(function(id){settings[id]=$(id).value;});return settings;
+  }
+  function saveSession(){
+    if(!state)return;
+    try{
+      localStorage.setItem(SESSION_KEY,JSON.stringify({version:1,savedAt:Date.now(),settings:settingsSnapshot(),cfg:cfg,orderId:orderId,state:state}));
+      localStorage.setItem(LOG_KEY,JSON.stringify(state.events||[]));
+    }catch(e){}
+  }
+  function restoreSession(){
+    try{
+      var saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");
+      if(!saved||saved.version!==1||!saved.state||!saved.state.sides)return false;
+      if(saved.settings)Object.keys(saved.settings).forEach(function(id){if($(id))$(id).value=saved.settings[id];});
+      state=saved.state;orderId=Number(saved.orderId)||0;
+      try{cfg=readConfig();}catch(e){cfg=saved.cfg||null;}
+      lockInputs(state.initialized&&!state.halted);
+      $("startButton").disabled=false;$("stopButton").disabled=true;
+      setStatus(state.initialized?"Сессия восстановлена · остановлена":"Не запущен","");
+      return true;
+    }catch(e){return false;}
+  }
+  function exportSession(){
+    saveSession();
+    var snapshot={
+      product:"HopeManity CSV Stop Grid · PAPER",
+      exportedAt:new Date().toISOString(),
+      autoTrading:false,
+      settings:settingsSnapshot(),
+      state:state,
+      orderId:orderId
+    };
+    var blob=new Blob([JSON.stringify(snapshot,null,2)],{type:"application/json"});
+    var url=URL.createObjectURL(blob),link=document.createElement("a");
+    link.href=url;link.download="HopeManity-PAPER-"+new Date().toISOString().replace(/[:.]/g,"-")+".json";
+    document.body.appendChild(link);link.click();link.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  }
   function addEvent(type,side,price,count,pnl,reason,ts){
     state.events.unshift({time:ts||Date.now(),type:type,side:side||"—",price:price||0,count:count||0,pnl:pnl,reason:reason||""});
     if(state.events.length>150)state.events.length=150;
-    try{localStorage.setItem(LOG_KEY,JSON.stringify(state.events));}catch(e){}
+    saveSession();
   }
   function currentExposure(){
     var total=0;
@@ -274,6 +315,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         addEvent("Сетка обновлена","LONG / SHORT",price,cfg.levels*2,null,"Центр перемещён к текущей цене",ts);
       }
     }
+    if(Date.now()-(state.lastSavedAt||0)>=1000){state.lastSavedAt=Date.now();saveSession();}
     var now=Date.now();
     if(now-uiTimer>200){uiTimer=now;render();}
   }
@@ -314,7 +356,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     if(old){try{old.close();}catch(e){}}
     if(!fromRisk&&!state.halted)setStatus("Остановлен","");
     $("startButton").disabled=false;$("stopButton").disabled=true;
-    lockInputs(state.initialized&&!state.halted);render();
+    lockInputs(state.initialized&&!state.halted);saveSession();render();
   }
   function lockInputs(lock){
     ["balanceInput","orderSizeInput","maxOrderQtyInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=lock;});
@@ -327,7 +369,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     else if(Math.abs(cfg.startBalance-state.startBalance)>0.001){alert("Баланс PAPER уже задан. Сбрось симуляцию, чтобы изменить его.");return;}
     running=true;reconnectDelay=1000;lockInputs(true);
     $("startButton").disabled=true;$("stopButton").disabled=false;
-    connect();render();
+    saveSession();connect();render();
   }
   function flattenAll(reason){
     if(!state.lastPrice)return;
@@ -342,7 +384,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     lockInputs(false);
     $("startButton").disabled=false;$("stopButton").disabled=true;
     setStatus("Не запущен","");
-    render();
+    saveSession();render();
   }
   function pruneTimes(arr,now){
     while(arr.length&&now-arr[0]>60000)arr.shift();
@@ -419,6 +461,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   $("startButton").addEventListener("click",startPaper);
   $("stopButton").addEventListener("click",function(){stopPaper(false);});
   $("flattenButton").addEventListener("click",function(){flattenAll("Закрыто вручную в PAPER");});
+  $("exportButton").addEventListener("click",exportSession);
   $("resetButton").addEventListener("click",function(){resetPaper();});
   window.addEventListener("resize",function(){drawChart();});
   state=blankState(Number($("balanceInput").value)||10000);
@@ -426,6 +469,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     var savedEvents=JSON.parse(localStorage.getItem(LOG_KEY)||"[]");
     if(Array.isArray(savedEvents))state.events=savedEvents.filter(function(e){return e&&Number.isFinite(e.time)&&typeof e.type==="string";}).slice(0,150);
   }catch(e){}
+  restoreSession();
   render();
 })();
 </script>
