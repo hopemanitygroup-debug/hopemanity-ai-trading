@@ -98,6 +98,11 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </section>
 
   <section class="card">
+    <div class="row"><h2>Текущие отложенные уровни</h2><span class="muted" id="pendingTableCount">0 уровней</span></div>
+    <div class="scroll"><table><thead><tr><th>Тип</th><th>Уровень</th><th>Цена ордера</th><th>Расстояние от BTC</th></tr></thead><tbody id="pendingOrders"><tr><td colspan="4" class="empty">Сетка появится после получения котировки.</td></tr></tbody></table></div>
+  </section>
+
+  <section class="card">
     <div class="row"><h2>Журнал виртуальных ордеров</h2><span class="muted" id="eventCount">0 событий</span></div>
     <div class="scroll"><table><thead><tr><th>Время</th><th>Событие</th><th>Сторона</th><th>Цена</th><th>Ордеров</th><th>P&amp;L корзины</th><th>Причина</th></tr></thead><tbody id="journal"><tr><td colspan="7" class="empty">Запусти PAPER, чтобы начать сбор тиков и симуляцию.</td></tr></tbody></table></div>
   </section>
@@ -356,7 +361,22 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("feedLag").textContent=state.lastTickAt?"Тиков получено: "+state.tickCount+" · задержка данных "+Math.max(0,Date.now()-state.lastTradeTime)+" мс":"Ожидание котировки";
     $("lastTick").textContent=state.lastTickAt?"Последний тик: "+timeText(state.lastTickAt):"Последний тик: —";
     $("eventCount").textContent=state.events.length+" событий";
-    renderJournal();drawChart();
+    renderPendingOrders(price);renderJournal();drawChart();
+  }
+  function renderPendingOrders(price){
+    var rows=[];
+    ["long","short"].forEach(function(s){
+      state.sides[s].pending.forEach(function(level){
+        rows.push({side:s,level:level.level,price:level.price});
+      });
+    });
+    rows.sort(function(a,b){return a.price-b.price;});
+    $("pendingTableCount").textContent=rows.length+" уровней";
+    if(!rows.length){$("pendingOrders").innerHTML='<tr><td colspan="4" class="empty">Нет ожидающих уровней.</td></tr>';return;}
+    $("pendingOrders").innerHTML=rows.map(function(row){
+      var distance=price?row.price-price:0;
+      return "<tr><td>"+(row.side==="long"?"Buy Stop":"Sell Stop")+"</td><td>"+row.level+"</td><td>"+priceText(row.price)+"</td><td>"+(price?(distance>=0?"+":"−")+priceText(Math.abs(distance)):"—")+"</td></tr>";
+    }).join("");
   }
   function renderJournal(){
     var body=$("journal");
