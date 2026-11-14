@@ -51,7 +51,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </div>
 </header>
 <main>
-  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Каждая позиция закрывается при первой чистой прибыли от $0.01 после комиссии и проскальзывания; убыточную можно закрыть кнопкой, автоматический стоп — не ниже −$10 на позицию. Реальные ордера не отправляются.</div>
+  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Все открытые позиции учитываются общей корзиной: она закрывается при чистом P/L от +$0,50 или при убытке −$10 после комиссии и проскальзывания. Реальные ордера не отправляются.</div>
 
   <section class="metrics">
     <div class="metric"><label>BTCUSDT</label><div class="value" id="price">—</div><small id="feedLag">Ожидание котировки</small></div>
@@ -71,16 +71,16 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   <section class="card">
     <h2>Настройки PAPER-симуляции</h2>
     <div class="controls">
-      <label>Виртуальный баланс, USDT<input id="balanceInput" type="number" min="100" step="100" value="25000"></label>
-      <label>Лот BTC на каждые $1,500 баланса<input id="orderSizeInput" type="number" min="0.0001" step="0.0001" value="0.0036"><small id="lotPreview">Объём на уровень: 0.0600 BTC · до плеча</small></label>
+      <label>Виртуальный баланс, USDT<input id="balanceInput" type="number" min="100" step="100" value="10000"></label>
+      <label>Лот BTC на каждые $1,500 баланса<input id="orderSizeInput" type="number" min="0.0001" step="0.0001" value="0.01"><small id="lotPreview">Объём на уровень: 0.06 BTC · до плеча</small></label>
       <label>Уровней на сторону<input id="levelsInput" type="number" min="1" max="20" step="1" value="20"></label>
       <label>Шаг уровня по CSV, USD<input id="stepInput" type="number" min="0.01" step="0.01" value="1.81"></label>
       <label>Комиссия за сторону, б.п.<input id="feeInput" type="number" min="0" step="0.5" value="5"></label>
       <label>Проскальзывание за сторону, б.п.<input id="slippageInput" type="number" min="0" step="0.5" value="2"></label>
-      <label>Чистая прибыль закрытия, USDT<input id="profitInput" type="number" min="0.01" step="0.01" value="0.01"></label>
-      <label>Стоп-лосс на позицию, USDT<input id="stopLossInput" type="number" min="0.01" step="0.5" value="10"></label>
+      <label>Цель чистой прибыли корзины, USDT<input id="profitInput" type="number" min="0.01" step="0.01" value="0.50"></label>
+      <label>Стоп-лосс корзины, USDT<input id="stopLossInput" type="number" min="0.01" step="0.5" value="10"></label>
       <label>Остановка сессии при убытке, %<input id="sessionLossInput" type="number" min="0.5" step="0.5" value="2"></label>
-      <label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="100" step="1" value="100"></label>
+      <label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="500" step="1" value="500"></label>
     </div>
     <p class="muted" id="costNote">Шаг уровней сохраняет значение из журнала: $1,81. Позиция закрывается только при чистом результате выше заданного порога, уже с учётом комиссии и проскальзывания.</p>
     <div class="actions">
@@ -89,7 +89,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       <button id="flattenButton">Закрыть виртуальные корзины</button>
       <button class="danger" id="resetButton">Сбросить симуляцию</button>
     </div>
-    <p class="muted">Размер каждой позиции фиксированный. Сетка обновляется раз в секунду вокруг последней цены; до 20 уровней на каждой стороне. Позиции закрываются независимо друг от друга. Кнопка «Закрыть виртуальные корзины» закрывает открытые позиции вручную. История журнала сохраняется на этом устройстве; состояние открытых позиций после перезагрузки PAPER не восстанавливается.</p>
+    <p class="muted">Размер каждой позиции фиксированный. Сетка обновляется раз в секунду вокруг последней цены; до 20 уровней на каждой стороне. Когда общий чистый результат открытых позиций достигает TP или стоп-лосса, вся корзина закрывается по текущей цене. Кнопка позволяет закрыть корзину вручную. История журнала сохраняется на этом устройстве; состояние открытых позиций после перезагрузки PAPER не восстанавливается.</p>
   </section>
 
   <section class="grid2">
@@ -144,10 +144,10 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     if(vals.some(function(x){return !Number.isFinite(x);}) ||
        c.startBalance<=0 || c.lotPer1500<=0 || c.levels<1 || c.levels>20 ||
        c.stepUsd<=0 || c.feeBps<0 || c.slipBps<0 || c.profitUsd<=0 || c.stopLossUsd<=0 ||
-       c.sessionLossPct<=0 || c.exposurePct<=0 || c.exposurePct>100){
+       c.sessionLossPct<=0 || c.exposurePct<=0 || c.exposurePct>500){
       throw new Error("Проверь настройки: значения должны быть положительными, уровней — от 1 до 20.");
     }
-    c.orderQty=c.startBalance/1500*c.lotPer1500;
+    c.orderQty=Math.floor((c.startBalance/1500*c.lotPer1500)*100)/100;
     c.feeRate=c.feeBps/10000;
     c.slipRate=c.slipBps/10000;
     return c;
@@ -226,23 +226,34 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     if(!p)return 0;
     var net=markedPositionPnl(p,price);
     side.positions.splice(index,1);
-    state.realized+=net;state.closedOrderTimes.push(Date.now());state.closedBasketTimes.push(Date.now());
+    state.realized+=net;state.closedOrderTimes.push(Date.now());
     addEvent("Позиция закрыта",sideNames[s],price,1,net,reason,ts);
     return net;
   }
-  function checkPositions(price,ts){
+  function openPositionCount(){
+    return state.sides.long.positions.length+state.sides.short.positions.length;
+  }
+  function closeAllPositions(price,reason,ts){
+    var count=0,total=0;
     ["long","short"].forEach(function(s){
-      var positions=state.sides[s].positions;
-      for(var i=positions.length-1;i>=0;i--){
-        var net=markedPositionPnl(positions[i],price);
-        if(net>=cfg.profitUsd)closePosition(s,i,price,"Чистая прибыль достигла порога",ts);
-        else if(net<=-cfg.stopLossUsd)closePosition(s,i,price,"Стоп-лосс на позицию",ts);
+      for(var i=state.sides[s].positions.length-1;i>=0;i--){
+        total+=closePosition(s,i,price,reason,ts);count++;
       }
     });
+    if(count){
+      state.closedBasketTimes.push(Date.now());
+      addEvent("Корзина закрыта","LONG / SHORT",price,count,total,reason,ts);
+    }
+    return total;
+  }
+  function checkBasket(price,ts){
+    if(openPositionCount()){
+      var net=currentFloating();
+      if(net>=cfg.profitUsd)closeAllPositions(price,"Цель корзины по чистой прибыли",ts);
+      else if(net<=-cfg.stopLossUsd)closeAllPositions(price,"Стоп-лосс корзины",ts);
+    }
     if(!state.halted && state.realized+currentFloating()<=-state.startBalance*cfg.sessionLossPct/100){
-      ["long","short"].forEach(function(s){
-        for(var i=state.sides[s].positions.length-1;i>=0;i--)closePosition(s,i,price,"Остановка по лимиту сессии",ts);
-      });
+      closeAllPositions(price,"Остановка по лимиту сессии",ts);
       state.halted=true;state.haltReason="Достигнут лимит убытка сессии";
       addEvent("PAPER остановлен","—",price,0,state.realized+currentFloating(),state.haltReason,ts);
       stopPaper(true);
@@ -253,7 +264,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     state.prices.push(price);if(state.prices.length>240)state.prices.shift();
     if(!state.initialized)initGrids(price,ts);
     else if(running && !state.halted){
-      checkPositions(price,ts);
+      checkBasket(price,ts);
       if(running && !state.halted){processEntries("long",price,ts);processEntries("short",price,ts);}
       if(running && !state.halted && Date.now()-(state.lastGridRefreshAt||0)>=1000){
         placeGrid("long",price);placeGrid("short",price);state.lastGridRefreshAt=Date.now();
@@ -317,9 +328,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   }
   function flattenAll(reason){
     if(!state.lastPrice)return;
-    ["long","short"].forEach(function(s){
-      for(var i=state.sides[s].positions.length-1;i>=0;i--)closePosition(s,i,state.lastPrice,reason,Date.now());
-    });
+    closeAllPositions(state.lastPrice,reason,Date.now());
     render();
   }
   function resetPaper(){
@@ -353,7 +362,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     var currentStep=cfg?cfg.stepUsd:0;
     $("effectiveStep").textContent=currentStep?"Эффективный шаг: "+priceText(currentStep):"Шаг сетки: —";
     var previewBalance=Number($("balanceInput").value)||0,previewRate=Number($("orderSizeInput").value)||0;
-    $("lotPreview").textContent="Объём на уровень: "+(previewBalance/1500*previewRate).toFixed(4)+" BTC · до плеча";
+    $("lotPreview").textContent="Объём на уровень: "+(Math.floor((previewBalance/1500*previewRate)*100)/100).toFixed(2)+" BTC · до плеча";
     $("longPnl").textContent=price?money(basketPnl("long",price)):"—";
     $("shortPnl").textContent=price?money(basketPnl("short",price)):"—";
     $("longPnl").className=basketPnl("long",price)>=0?"positive":"negative";
@@ -408,7 +417,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   $("flattenButton").addEventListener("click",function(){flattenAll("Закрыто вручную в PAPER");});
   $("resetButton").addEventListener("click",function(){resetPaper();});
   window.addEventListener("resize",function(){drawChart();});
-  state=blankState(Number($("balanceInput").value)||25000);
+  state=blankState(Number($("balanceInput").value)||10000);
   try{
     var savedEvents=JSON.parse(localStorage.getItem(LOG_KEY)||"[]");
     if(Array.isArray(savedEvents))state.events=savedEvents.filter(function(e){return e&&Number.isFinite(e.time)&&typeof e.type==="string";}).slice(0,150);
