@@ -51,7 +51,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </div>
 </header>
 <main>
-  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Все открытые позиции учитываются общей корзиной: она закрывается при чистом P/L от +$0,50 или при убытке −$10 после комиссии и проскальзывания. Реальные ордера не отправляются.</div>
+  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Все открытые позиции учитываются общей корзиной: она закрывается при чистом P/L выше нуля (порог $0,01) или при убытке −$10 после комиссии и проскальзывания. Реальные ордера не отправляются.</div>
 
   <section class="metrics">
     <div class="metric"><label>BTCUSDT</label><div class="value" id="price">—</div><small id="feedLag">Ожидание котировки</small></div>
@@ -78,7 +78,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       <label>Шаг уровня по CSV, USD<input id="stepInput" type="number" min="0.01" step="0.01" value="1.81"></label>
       <label>Комиссия за сторону, б.п.<input id="feeInput" type="number" min="0" step="0.5" value="0"></label>
       <label>Проскальзывание за сторону, б.п.<input id="slippageInput" type="number" min="0" step="0.5" value="0"></label>
-      <label>Цель чистой прибыли корзины, USDT<input id="profitInput" type="number" min="0.01" step="0.01" value="0.50"></label>
+      <label>Минимальная чистая прибыль корзины, USDT<input id="profitInput" type="number" min="0.01" step="0.01" value="0.01"></label>
       <label>Стоп-лосс корзины, USDT<input id="stopLossInput" type="number" min="0.01" step="0.5" value="10"></label>
       <label>Остановка сессии при убытке, %<input id="sessionLossInput" type="number" min="0.5" step="0.5" value="2"></label>
       <label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="500" step="1" value="500"></label>
