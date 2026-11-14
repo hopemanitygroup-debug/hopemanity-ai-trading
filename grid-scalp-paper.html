@@ -71,8 +71,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   <section class="card">
     <h2>Настройки PAPER-симуляции</h2>
     <div class="controls">
-      <label>Виртуальный баланс, USDT<input id="balanceInput" type="number" min="100" step="100" value="9000"></label>
-      <label>Лот BTC на каждые $1,500 баланса<input id="orderSizeInput" type="number" min="0.0001" step="0.0001" value="0.01"><small id="lotPreview">Объём на уровень: 0.0600 BTC · до плеча</small></label>
+      <label>Виртуальный баланс, USDT<input id="balanceInput" type="number" min="100" step="100" value="25000"></label>
+      <label>Лот BTC на каждые $1,500 баланса<input id="orderSizeInput" type="number" min="0.0001" step="0.0001" value="0.0036"><small id="lotPreview">Объём на уровень: 0.0600 BTC · до плеча</small></label>
       <label>Уровней на сторону<input id="levelsInput" type="number" min="1" max="20" step="1" value="20"></label>
       <label>Шаг уровня по CSV, USD<input id="stepInput" type="number" min="0.01" step="0.01" value="1.81"></label>
       <label>Комиссия за сторону, б.п.<input id="feeInput" type="number" min="0" step="0.5" value="5"></label>
@@ -408,7 +408,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   $("flattenButton").addEventListener("click",function(){flattenAll("Закрыто вручную в PAPER");});
   $("resetButton").addEventListener("click",function(){resetPaper();});
   window.addEventListener("resize",function(){drawChart();});
-  state=blankState(Number($("balanceInput").value)||9000);
+  state=blankState(Number($("balanceInput").value)||25000);
   try{
     var savedEvents=JSON.parse(localStorage.getItem(LOG_KEY)||"[]");
     if(Array.isArray(savedEvents))state.events=savedEvents.filter(function(e){return e&&Number.isFinite(e.time)&&typeof e.type==="string";}).slice(0,150);
