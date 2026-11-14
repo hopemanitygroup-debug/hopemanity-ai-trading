@@ -105,7 +105,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </section>
 
   <section class="card">
-    <div class="row"><h2>Журнал виртуальных ордеров</h2><span class="muted" id="eventCount">0 событий</span></div>
+    <div class="row"><h2>Журнал виртуальных ордеров</h2><div class="row"><span class="muted" id="eventCount">0 событий</span><button id="exportJournalButton">Скачать журнал CSV</button></div></div>
     <div class="scroll"><table><thead><tr><th>Время</th><th>Событие</th><th>Сторона</th><th>Цена</th><th>Ордеров</th><th>P&amp;L корзины</th><th>Причина</th></tr></thead><tbody id="journal"><tr><td colspan="7" class="empty">Запусти PAPER, чтобы начать сбор тиков и симуляцию.</td></tr></tbody></table></div>
   </section>
 </main>
@@ -199,9 +199,25 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     link.href=url;link.download="HopeManity-PAPER-"+new Date().toISOString().replace(/[:.]/g,"-")+".json";
     document.body.appendChild(link);link.click();link.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);
   }
+  function exportJournal(){
+    var columns=["Время","Событие","Сторона","Цена","Ордеров","P/L корзины USD","Причина"];
+    function cell(value){return '"'+String(value==null?"":value).replace(/"/g,'""')+'"';}
+    var lines=[columns.map(cell).join(";")];
+    state.events.slice().reverse().forEach(function(e){
+      lines.push([
+        new Date(e.time).toISOString(),e.type,e.side,
+        e.price?Number(e.price).toFixed(2):"",e.count,
+        e.pnl==null?"":Number(e.pnl).toFixed(2),e.reason
+      ].map(cell).join(";"));
+    });
+    var blob=new Blob(["\uFEFF"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
+    var url=URL.createObjectURL(blob),link=document.createElement("a");
+    link.href=url;link.download="HopeManity-PAPER-journal-"+new Date().toISOString().replace(/[:.]/g,"-")+".csv";
+    document.body.appendChild(link);link.click();link.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);
+  }
   function addEvent(type,side,price,count,pnl,reason,ts){
     state.events.unshift({time:ts||Date.now(),type:type,side:side||"—",price:price||0,count:count||0,pnl:pnl,reason:reason||""});
-    if(state.events.length>150)state.events.length=150;
+    if(state.events.length>5000)state.events.length=5000;
     saveSession();
   }
   function currentExposure(){
@@ -462,12 +478,13 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   $("stopButton").addEventListener("click",function(){stopPaper(false);});
   $("flattenButton").addEventListener("click",function(){flattenAll("Закрыто вручную в PAPER");});
   $("exportButton").addEventListener("click",exportSession);
+  $("exportJournalButton").addEventListener("click",exportJournal);
   $("resetButton").addEventListener("click",function(){resetPaper();});
   window.addEventListener("resize",function(){drawChart();});
   state=blankState(Number($("balanceInput").value)||10000);
   try{
     var savedEvents=JSON.parse(localStorage.getItem(LOG_KEY)||"[]");
-    if(Array.isArray(savedEvents))state.events=savedEvents.filter(function(e){return e&&Number.isFinite(e.time)&&typeof e.type==="string";}).slice(0,150);
+    if(Array.isArray(savedEvents))state.events=savedEvents.filter(function(e){return e&&Number.isFinite(e.time)&&typeof e.type==="string";}).slice(0,5000);
   }catch(e){}
   restoreSession();
   render();
