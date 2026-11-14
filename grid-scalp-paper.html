@@ -76,15 +76,16 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       <label>Максимум BTC на один уровень<input id="maxOrderQtyInput" type="number" min="0.01" step="0.01" value="0.06"></label>
       <label>Уровней на сторону<input id="levelsInput" type="number" min="1" max="20" step="1" value="20"></label>
       <label>Шаг уровня по CSV, USD<input id="stepInput" type="number" min="0.01" step="0.01" value="1.81"></label>
-      <label>Комиссия за сторону, б.п.<input id="feeInput" type="number" min="0" step="0.5" value="0"></label>
+      <label>Комиссия за сторону, б.п.<input id="feeInput" type="number" min="0" step="0.01" value="0"><small id="feeSource">Не загружена</small></label>
       <label>Проскальзывание за сторону, б.п.<input id="slippageInput" type="number" min="0" step="0.5" value="0"></label>
       <label>Минимальная чистая прибыль корзины, USDT<input id="profitInput" type="number" min="0.01" step="0.01" value="0.01"></label>
       <label>Стоп-лосс корзины, USDT<input id="stopLossInput" type="number" min="0.01" step="0.5" value="10"></label>
       <label>Остановка сессии при убытке, %<input id="sessionLossInput" type="number" min="0.5" step="0.5" value="2"></label>
       <label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="500" step="1" value="500"></label>
     </div>
-    <p class="muted" id="costNote">Шаг по журналу — $1,81. В примере терминала видимый P/L соответствует изменению цены × лот, поэтому дополнительные комиссия и проскальзывание по умолчанию равны нулю; укажи реальные расходы, если они известны.</p>
+    <p class="muted" id="costNote">Автозагрузка получает индивидуальную комиссию BTCUSDT Futures (taker) из Binance и подставляет её в б.п. Проскальзывание не предоставляется Binance и задаётся отдельно. Для подключения нужен отдельный API-ключ только для чтения без разрешения на торговлю и вывод.</p>
     <div class="actions">
+      <button id="feeFetchButton">Получить комиссию Binance</button>
       <button class="primary" id="startButton">Запустить PAPER</button>
       <button id="stopButton" disabled>Остановить</button>
       <button id="flattenButton">Закрыть виртуальные корзины</button>
@@ -116,6 +117,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   "use strict";
   var $ = function(id){ return document.getElementById(id); };
   var FEED = "wss://stream.binance.com:9443/ws/btcusdt@trade";
+  var FEE_API = "https://hopemanity-fees.workers.dev/commission";
   var LOG_KEY = "hopemanity_csv_stop_grid_events_v2";
   var SESSION_KEY = "hopemanity_csv_stop_grid_session_v1";
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
@@ -359,6 +361,21 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     var now=Date.now();
     if(now-uiTimer>200){uiTimer=now;render();}
   }
+  async function fetchBinanceFee(){
+    var button=$("feeFetchButton"), label=$("feeSource");
+    button.disabled=true;label.textContent="Запрос к Binance…";
+    try{
+      var response=await fetch(FEE_API,{method:"GET",headers:{Accept:"application/json"}});
+      var data=await response.json();
+      if(!response.ok)throw new Error(data.message||data.error||("HTTP "+response.status));
+      if(!Number.isFinite(data.takerBps)||data.takerBps<0)throw new Error("Binance вернула некорректную ставку.");
+      $("feeInput").value=String(Number(data.takerBps.toFixed(4)));
+      label.textContent="Binance Futures taker · "+data.takerBps.toFixed(2)+" б.п. · "+new Date(data.updatedAt).toLocaleTimeString("ru-RU");
+      saveSession();
+    }catch(error){
+      label.textContent="Ошибка: "+error.message;
+    }finally{button.disabled=false;}
+  }
   function setStatus(text,mode){
     $("connectionStatus").textContent=text;
     $("statusDot").className="dot"+(mode?" "+mode:"");
@@ -502,6 +519,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     values.forEach(function(v,i){var x=i/(values.length-1)*w,y=h-8*dpr-(v-min)/(range)*(h-16*dpr);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});
     ctx.stroke();
   }
+  $("feeFetchButton").addEventListener("click",fetchBinanceFee);
   $("startButton").addEventListener("click",startPaper);
   $("stopButton").addEventListener("click",function(){stopPaper(false);});
   $("flattenButton").addEventListener("click",function(){flattenAll("Закрыто вручную в PAPER");});
