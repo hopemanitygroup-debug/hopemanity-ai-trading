@@ -72,24 +72,25 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     <h2>Настройки PAPER-симуляции</h2>
     <div class="controls">
       <label>Виртуальный баланс, USDT<input id="balanceInput" type="number" min="100" step="100" value="10000"></label>
-      <label>Лот BTC на каждые $1,500 баланса<input id="orderSizeInput" type="number" min="0.0001" step="0.0001" value="0.01"><small id="lotPreview">Объём на уровень: 0.06 BTC · до плеча</small></label>
+      <label>Автолоты BTC на каждые $1,500 баланса<input id="orderSizeInput" type="number" min="0.0001" step="0.0001" value="0.01"><small id="lotPreview">Объём на уровень: 0.06 BTC · с ограничением</small></label>
+      <label>Максимум BTC на один уровень<input id="maxOrderQtyInput" type="number" min="0.01" step="0.01" value="0.06"></label>
       <label>Уровней на сторону<input id="levelsInput" type="number" min="1" max="20" step="1" value="20"></label>
       <label>Шаг уровня по CSV, USD<input id="stepInput" type="number" min="0.01" step="0.01" value="1.81"></label>
-      <label>Комиссия за сторону, б.п.<input id="feeInput" type="number" min="0" step="0.5" value="5"></label>
-      <label>Проскальзывание за сторону, б.п.<input id="slippageInput" type="number" min="0" step="0.5" value="2"></label>
+      <label>Комиссия за сторону, б.п.<input id="feeInput" type="number" min="0" step="0.5" value="0"></label>
+      <label>Проскальзывание за сторону, б.п.<input id="slippageInput" type="number" min="0" step="0.5" value="0"></label>
       <label>Цель чистой прибыли корзины, USDT<input id="profitInput" type="number" min="0.01" step="0.01" value="0.50"></label>
       <label>Стоп-лосс корзины, USDT<input id="stopLossInput" type="number" min="0.01" step="0.5" value="10"></label>
       <label>Остановка сессии при убытке, %<input id="sessionLossInput" type="number" min="0.5" step="0.5" value="2"></label>
       <label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="500" step="1" value="500"></label>
     </div>
-    <p class="muted" id="costNote">Шаг уровней сохраняет значение из журнала: $1,81. Позиция закрывается только при чистом результате выше заданного порога, уже с учётом комиссии и проскальзывания.</p>
+    <p class="muted" id="costNote">Шаг по журналу — $1,81. В примере терминала видимый P/L соответствует изменению цены × лот, поэтому дополнительные комиссия и проскальзывание по умолчанию равны нулю; укажи реальные расходы, если они известны.</p>
     <div class="actions">
       <button class="primary" id="startButton">Запустить PAPER</button>
       <button id="stopButton" disabled>Остановить</button>
       <button id="flattenButton">Закрыть виртуальные корзины</button>
       <button class="danger" id="resetButton">Сбросить симуляцию</button>
     </div>
-    <p class="muted">Размер каждой позиции фиксированный. Сетка обновляется раз в секунду вокруг последней цены; до 20 уровней на каждой стороне. Когда общий чистый результат открытых позиций достигает TP или стоп-лосса, вся корзина закрывается по текущей цене. Кнопка позволяет закрыть корзину вручную. История журнала сохраняется на этом устройстве; состояние открытых позиций после перезагрузки PAPER не восстанавливается.</p>
+    <p class="muted">Размер ордера считается автоматически от баланса, но ограничен максимальным лотом на уровень. Сетка обновляется раз в секунду вокруг последней цены; до 20 уровней на каждой стороне. Когда общий результат открытых позиций достигает TP или стоп-лосса, вся корзина закрывается по текущей цене. История журнала сохраняется на этом устройстве; открытые позиции после перезагрузки PAPER не восстанавливаются.</p>
   </section>
 
   <section class="grid2">
@@ -131,6 +132,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     var c={
       startBalance:Number($("balanceInput").value),
       lotPer1500:Number($("orderSizeInput").value),
+      maxOrderQty:Number($("maxOrderQtyInput").value),
       levels:Math.floor(Number($("levelsInput").value)),
       stepUsd:Number($("stepInput").value),
       feeBps:Number($("feeInput").value),
@@ -142,12 +144,13 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     };
     var vals=Object.keys(c).map(function(k){return c[k];});
     if(vals.some(function(x){return !Number.isFinite(x);}) ||
-       c.startBalance<=0 || c.lotPer1500<=0 || c.levels<1 || c.levels>20 ||
+       c.startBalance<=0 || c.lotPer1500<=0 || c.maxOrderQty<=0 || c.levels<1 || c.levels>20 ||
        c.stepUsd<=0 || c.feeBps<0 || c.slipBps<0 || c.profitUsd<=0 || c.stopLossUsd<=0 ||
        c.sessionLossPct<=0 || c.exposurePct<=0 || c.exposurePct>500){
       throw new Error("Проверь настройки: значения должны быть положительными, уровней — от 1 до 20.");
     }
-    c.orderQty=Math.floor((c.startBalance/1500*c.lotPer1500)*100)/100;
+    c.orderQty=Math.floor(Math.min(c.startBalance/1500*c.lotPer1500,c.maxOrderQty)*100)/100;
+    if(c.orderQty<0.01)throw new Error("Автолоты дают меньше 0,01 BTC на уровень. Увеличь лот на $1,500 или баланс.");
     c.feeRate=c.feeBps/10000;
     c.slipRate=c.slipBps/10000;
     return c;
@@ -314,7 +317,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     lockInputs(state.initialized&&!state.halted);render();
   }
   function lockInputs(lock){
-    ["balanceInput","orderSizeInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=lock;});
+    ["balanceInput","orderSizeInput","maxOrderQtyInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=lock;});
   }
   function startPaper(){
     if(running)return;
@@ -362,7 +365,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     var currentStep=cfg?cfg.stepUsd:0;
     $("effectiveStep").textContent=currentStep?"Эффективный шаг: "+priceText(currentStep):"Шаг сетки: —";
     var previewBalance=Number($("balanceInput").value)||0,previewRate=Number($("orderSizeInput").value)||0;
-    $("lotPreview").textContent="Объём на уровень: "+(Math.floor((previewBalance/1500*previewRate)*100)/100).toFixed(2)+" BTC · до плеча";
+    var maxQty=Number($("maxOrderQtyInput").value)||0;
+    $("lotPreview").textContent="Объём на уровень: "+(Math.floor(Math.min(previewBalance/1500*previewRate,maxQty)*100)/100).toFixed(2)+" BTC · с ограничением";
     $("longPnl").textContent=price?money(basketPnl("long",price)):"—";
     $("shortPnl").textContent=price?money(basketPnl("short",price)):"—";
     $("longPnl").className=basketPnl("long",price)>=0?"positive":"negative";
