@@ -117,8 +117,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   var $ = function(id){ return document.getElementById(id); };
   var FEED = "wss://stream.binance.com:9443/ws/btcusdt@trade";
   var FEE_API = "https://hopemanity-binance-fees.hopemanity-fees.workers.dev/commission";
-  var LOG_KEY = "hopemanity_csv_stop_grid_events_v6";
-  var SESSION_KEY = "hopemanity_csv_stop_grid_session_v6";
+  var LOG_KEY = "hopemanity_csv_stop_grid_events_v7";
+  var SESSION_KEY = "hopemanity_csv_stop_grid_session_v7";
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
   var cfg=null, state=null, orderId=0, uiTimer=0;
   var sideNames={long:"LONG",short:"SHORT"};
@@ -362,6 +362,13 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         addEvent("Пауза завершена","LONG / SHORT",price,cfg.levels*2,null,"Сетка заново выставлена вокруг текущей цены",ts);
       }
       var reentryBlocked=Boolean(state.reentryUntil && ts<state.reentryUntil);
+      if(running && !state.halted && !reentryBlocked &&
+         openPositionCount()===0 &&
+         state.sides.long.pending.length===0 && state.sides.short.pending.length===0){
+        placeGrid("long",price);placeGrid("short",price);
+        state.lastGridRefreshAt=Date.now();
+        addEvent("Сетка восстановлена","LONG / SHORT",price,cfg.levels*2,null,"Пустая сетка восстановлена вокруг текущей цены",ts);
+      }
       if(running && !state.halted && !reentryBlocked){processEntries("long",price,ts);processEntries("short",price,ts);}
       var refreshNow=Date.now();
       if(running && !state.halted && !reentryBlocked && refreshNow-(state.lastGridRefreshAt||0)>=1000){
