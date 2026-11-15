@@ -72,8 +72,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     <h2>Настройки PAPER-симуляции</h2>
     <div class="controls">
       <label>Виртуальный баланс, USDT<input id="balanceInput" type="number" min="100" step="100" value="10000"></label>
-      <label>Автолоты BTC на каждые $1,500 баланса<input id="orderSizeInput" type="number" min="0.0001" step="0.0001" value="0.01"><small id="lotPreview">Объём на уровень: 0.06 BTC · с ограничением</small></label>
-      <label>Максимум BTC на один уровень<input id="maxOrderQtyInput" type="number" min="0.01" step="0.01" value="0.06"></label>
+      <label>Сумма позиции на уровень, USDT<input id="positionSizeInput" type="number" min="10" step="10" value="100"><small id="lotPreview">Номинал $100 · маржа при 5×: $20</small></label>
+      <label>Плечо PAPER<input id="leverageInput" type="number" min="1" max="125" step="1" value="5"><small>Маржа = сумма позиции ÷ плечо. Ликвидация в PAPER не моделируется.</small></label>
       <label>Уровней на сторону<input id="levelsInput" type="number" min="1" max="20" step="1" value="20"></label>
       <label>Шаг уровня по CSV, USD<input id="stepInput" type="number" min="0.01" step="0.01" value="1.81"></label>
       <label>Комиссия за сторону, %<input id="feeInput" type="number" min="0" step="0.01" value="0.05"><small id="feeSource">Ручная настройка · стандартный taker</small></label>
@@ -136,8 +136,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function readConfig(){
     var c={
       startBalance:Number($("balanceInput").value),
-      lotPer1500:Number($("orderSizeInput").value),
-      maxOrderQty:Number($("maxOrderQtyInput").value),
+      positionUsd:Number($("positionSizeInput").value),
+      leverage:Number($("leverageInput").value),
       levels:Math.floor(Number($("levelsInput").value)),
       stepUsd:Number($("stepInput").value),
       feeBps:Number($("feeInput").value)*100,
@@ -149,13 +149,12 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     };
     var vals=Object.keys(c).map(function(k){return c[k];});
     if(vals.some(function(x){return !Number.isFinite(x);}) ||
-       c.startBalance<=0 || c.lotPer1500<=0 || c.maxOrderQty<=0 || c.levels<1 || c.levels>20 ||
+       c.startBalance<=0 || c.positionUsd<10 || c.leverage<1 || c.leverage>125 || c.levels<1 || c.levels>20 ||
        c.stepUsd<=0 || c.feeBps<0 || c.slipBps<0 || c.profitUsd<=0 || c.stopLossUsd<=0 ||
        c.sessionLossPct<=0 || c.exposurePct<=0 || c.exposurePct>500){
       throw new Error("Проверь настройки: значения должны быть положительными, уровней — от 1 до 20.");
     }
-    c.orderQty=Math.floor(Math.min(c.startBalance/1500*c.lotPer1500,c.maxOrderQty)*100)/100;
-    if(c.orderQty<0.01)throw new Error("Автолоты дают меньше 0,01 BTC на уровень. Увеличь лот на $1,500 или баланс.");
+    c.orderQty=null;
     c.feeRate=c.feeBps/10000;
     c.slipRate=c.slipBps/10000;
     return c;
@@ -164,7 +163,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function priceText(x){return x>0?new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}).format(x):"—";}
   function timeText(ms){return new Date(ms).toLocaleTimeString("ru-RU",{hour12:false});}
   function settingsSnapshot(){
-    var ids=["balanceInput","orderSizeInput","maxOrderQtyInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"];
+    var ids=["balanceInput","positionSizeInput","leverageInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"];
     var settings={};ids.forEach(function(id){settings[id]=$(id).value;});return settings;
   }
   function saveSession(){
@@ -250,9 +249,9 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     return state.sides[s].positions.reduce(function(a,p){return a+markedPositionPnl(p,marketPrice);},0);
   }
   function effectiveStepUsd(center){
-    if(!cfg||!center||!cfg.orderQty)return cfg?cfg.stepUsd:0;
+    if(!cfg||!center)return cfg?cfg.stepUsd:0;
     var roundTripCostPerBtc=center*2*(cfg.feeRate+cfg.slipRate);
-    var targetPerOrder=cfg.profitUsd/cfg.orderQty;
+    var targetPerOrder=cfg.profitUsd*center/cfg.positionUsd;
     return Math.max(cfg.stepUsd,roundTripCostPerBtc+targetPerOrder);
   }
   function placeGrid(s,center){
@@ -276,7 +275,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     }
     var fillBase=s==="long"?Math.max(price,level.price):Math.min(price,level.price);
     var fill=s==="long"?fillBase*(1+cfg.slipRate):fillBase*(1-cfg.slipRate);
-    var qty=cfg.orderQty,notional=qty*fill;
+    var notional=cfg.positionUsd,qty=notional/fill;
     var maxExposure=Math.max(0,currentEquity()*cfg.exposurePct/100);
     if(currentExposure()+notional>maxExposure){
       addEvent("Пропуск уровня",sideNames[s],price,1,null,"Достигнут предел экспозиции",ts);
@@ -434,7 +433,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     lockInputs(state.initialized&&!state.halted);saveSession();render();
   }
   function lockInputs(lock){
-    ["balanceInput","orderSizeInput","maxOrderQtyInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=lock;});
+    ["balanceInput","positionSizeInput","leverageInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=lock;});
   }
   function startPaper(){
     if(running)return;
@@ -485,9 +484,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("basketsPerMinute").textContent="Закрыто позиций: "+state.closedBasketTimes.length;
     var currentStep=cfg&&price?effectiveStepUsd(price):(cfg?cfg.stepUsd:0);
     $("effectiveStep").textContent=currentStep?"Шаг с учётом расходов: "+priceText(currentStep):"Шаг сетки: —";
-    var previewBalance=Number($("balanceInput").value)||0,previewRate=Number($("orderSizeInput").value)||0;
-    var maxQty=Number($("maxOrderQtyInput").value)||0;
-    $("lotPreview").textContent="Объём на уровень: "+(Math.floor(Math.min(previewBalance/1500*previewRate,maxQty)*100)/100).toFixed(2)+" BTC · с ограничением";
+    var previewNotional=Number($("positionSizeInput").value)||0,previewLev=Number($("leverageInput").value)||1;
+    $("lotPreview").textContent="Номинал "+money(previewNotional)+" · маржа при "+previewLev+"×: "+money(previewNotional/previewLev);
     $("longPnl").textContent=price?money(basketPnl("long",price)):"—";
     $("shortPnl").textContent=price?money(basketPnl("short",price)):"—";
     $("longPnl").className=basketPnl("long",price)>=0?"positive":"negative";
