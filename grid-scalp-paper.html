@@ -369,9 +369,11 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       }
       var reentryBlocked=Boolean(state.reentryUntil && ts<state.reentryUntil);
       if(running && !state.halted && !reentryBlocked){processEntries("long",price,ts);processEntries("short",price,ts);}
-      if(running && !state.halted && !reentryBlocked && Date.now()-(state.lastGridRefreshAt||0)>=1000){
+      var gridRange=effectiveStepUsd(price)*cfg.levels;
+      var gridDrift=Math.max(Math.abs(price-(state.sides.long.center||price)),Math.abs(price-(state.sides.short.center||price)));
+      if(running && !state.halted && !reentryBlocked && openPositionCount()===0 && gridDrift>=gridRange){
         placeGrid("long",price);placeGrid("short",price);state.lastGridRefreshAt=Date.now();
-        addEvent("Сетка обновлена","LONG / SHORT",price,cfg.levels*2,null,"Центр перемещён к текущей цене",ts);
+        addEvent("Сетка переставлена","LONG / SHORT",price,cfg.levels*2,null,"Цена вышла за полный диапазон сетки",ts);
       }
     }
     if(Date.now()-(state.lastSavedAt||0)>=1000){state.lastSavedAt=Date.now();saveSession();}
