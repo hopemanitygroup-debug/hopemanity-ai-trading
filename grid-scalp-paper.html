@@ -51,7 +51,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </div>
 </header>
 <main>
-  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Одновременно допускается максимум 40 открытых позиций: до 20 LONG и до 20 SHORT. Корзина закрывается при чистом P/L выше $0,01, убытке $10 или через 60 секунд после достижения лимита, если TP/SL не сработал. Реальные ордера не отправляются.</div>
+  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Одновременно допускается максимум 40 открытых позиций: до 20 LONG и до 20 SHORT. Корзина закрывается при чистом P/L выше <span id="profitNotice">$0,10</span>, убытке <span id="stopNotice">$10,00</span> или через 60 секунд после достижения лимита, если TP/SL не сработал. Реальные ордера не отправляются.</div>
 
   <section class="metrics">
     <div class="metric"><label>BTCUSDT</label><div class="value" id="price">—</div><small id="feedLag">Ожидание котировки</small></div>
@@ -488,6 +488,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("effectiveStep").textContent=currentStep?"Шаг с учётом расходов: "+priceText(currentStep):"Шаг сетки: —";
     var positionUsd=Number($("positionUsdInput").value)||0;
     $("positionPreview").textContent=price&&positionUsd?"Примерно "+(positionUsd/price).toFixed(6)+" BTC по текущей цене.":"Объём в BTC будет рассчитан автоматически по текущей цене.";
+    $("profitNotice").textContent=money(Number($("profitInput").value)||0);
+    $("stopNotice").textContent=money(Number($("stopLossInput").value)||0);
     $("longPnl").textContent=price?money(basketPnl("long",price)):"—";
     $("shortPnl").textContent=price?money(basketPnl("short",price)):"—";
     $("longPnl").className=basketPnl("long",price)>=0?"positive":"negative";
