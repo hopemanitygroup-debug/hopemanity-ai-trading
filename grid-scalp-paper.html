@@ -117,7 +117,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   "use strict";
   var $ = function(id){ return document.getElementById(id); };
   var FEED = "wss://stream.binance.com:9443/ws/btcusdt@trade";
-  var FEE_API = "https://hopemanity-fees.workers.dev/commission";
+  var FEE_API = "https://hopemanity-binance-fees.hopemanity-fees.workers.dev/commission";
   var LOG_KEY = "hopemanity_csv_stop_grid_events_v2";
   var SESSION_KEY = "hopemanity_csv_stop_grid_session_v1";
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
