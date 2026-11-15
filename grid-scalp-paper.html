@@ -367,7 +367,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     try{
       var response=await fetch(FEE_API,{method:"GET",headers:{Accept:"application/json"}});
       var data=await response.json();
-      if(!response.ok)throw new Error([data.message||data.error, data.diagnostic, data.code].filter(Boolean).join(" · ")||("HTTP "+response.status));
+      if(!response.ok)throw new Error([data.message||data.error, data.diagnostic, data.code&&("Binance code "+data.code), data.upstreamStatus&&("Binance HTTP "+data.upstreamStatus), data.contentType&&("тип "+data.contentType)].filter(Boolean).join(" · ")||("HTTP "+response.status));
       if(!Number.isFinite(data.takerBps)||data.takerBps<0)throw new Error("Binance вернула некорректную ставку.");
       $("feeInput").value=String(Number(data.takerBps.toFixed(4)));
       label.textContent="Binance Futures taker · "+data.takerBps.toFixed(2)+" б.п. · "+new Date(data.updatedAt).toLocaleTimeString("ru-RU");
