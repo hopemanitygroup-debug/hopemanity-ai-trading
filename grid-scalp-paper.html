@@ -76,8 +76,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       <label>Максимум BTC на один уровень<input id="maxOrderQtyInput" type="number" min="0.01" step="0.01" value="0.06"></label>
       <label>Уровней на сторону<input id="levelsInput" type="number" min="1" max="20" step="1" value="20"></label>
       <label>Шаг уровня по CSV, USD<input id="stepInput" type="number" min="0.01" step="0.01" value="1.81"></label>
-      <label>Комиссия за сторону, б.п.<input id="feeInput" type="number" min="0" step="0.01" value="0"><small id="feeSource">Не загружена</small></label>
-      <label>Проскальзывание за сторону, б.п.<input id="slippageInput" type="number" min="0" step="0.5" value="0"></label>
+      <label>Комиссия за сторону, %<input id="feeInput" type="number" min="0" step="0.01" value="0.05"><small id="feeSource">Ручная настройка · стандартный taker</small></label>
+      <label>Проскальзывание за сторону, %<input id="slippageInput" type="number" min="0" step="0.01" value="0.02"></label>
       <label>Минимальная чистая прибыль корзины, USDT<input id="profitInput" type="number" min="0.01" step="0.01" value="0.01"></label>
       <label>Стоп-лосс корзины, USDT<input id="stopLossInput" type="number" min="0.01" step="0.5" value="10"></label>
       <label>Остановка сессии при убытке, %<input id="sessionLossInput" type="number" min="0.5" step="0.5" value="2"></label>
@@ -140,8 +140,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       maxOrderQty:Number($("maxOrderQtyInput").value),
       levels:Math.floor(Number($("levelsInput").value)),
       stepUsd:Number($("stepInput").value),
-      feeBps:Number($("feeInput").value),
-      slipBps:Number($("slippageInput").value),
+      feeBps:Number($("feeInput").value)*100,
+      slipBps:Number($("slippageInput").value)*100,
       profitUsd:Number($("profitInput").value),
       stopLossUsd:Number($("stopLossInput").value),
       sessionLossPct:Number($("sessionLossInput").value),
@@ -170,15 +170,18 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function saveSession(){
     if(!state)return;
     try{
-      localStorage.setItem(SESSION_KEY,JSON.stringify({version:1,savedAt:Date.now(),settings:settingsSnapshot(),cfg:cfg,orderId:orderId,state:state}));
+      localStorage.setItem(SESSION_KEY,JSON.stringify({version:2,savedAt:Date.now(),settings:settingsSnapshot(),cfg:cfg,orderId:orderId,state:state}));
       localStorage.setItem(LOG_KEY,JSON.stringify(state.events||[]));
     }catch(e){}
   }
   function restoreSession(){
     try{
       var saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");
-      if(!saved||saved.version!==1||!saved.state||!saved.state.sides)return false;
-      if(saved.settings)Object.keys(saved.settings).forEach(function(id){if($(id))$(id).value=saved.settings[id];});
+      if(!saved||![1,2].includes(saved.version)||!saved.state||!saved.state.sides)return false;
+      if(saved.settings){
+        if(saved.version===1){["feeInput","slippageInput"].forEach(function(id){if(saved.settings[id]!=null)saved.settings[id]=String(Number(saved.settings[id])/100);});saved.version=2;}
+        Object.keys(saved.settings).forEach(function(id){if($(id))$(id).value=saved.settings[id];});
+      }
       state=saved.state;orderId=Number(saved.orderId)||0;
       try{cfg=readConfig();}catch(e){cfg=saved.cfg||null;}
       lockInputs(state.initialized&&!state.halted);
@@ -369,8 +372,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       var data=await response.json();
       if(!response.ok)throw new Error([data.message||data.error, data.diagnostic, data.code&&("Binance code "+data.code), data.upstreamStatus&&("Binance HTTP "+data.upstreamStatus), data.contentType&&("тип "+data.contentType)].filter(Boolean).join(" · ")||("HTTP "+response.status));
       if(!Number.isFinite(data.takerBps)||data.takerBps<0)throw new Error("Binance вернула некорректную ставку.");
-      $("feeInput").value=String(Number(data.takerBps.toFixed(4)));
-      label.textContent="Binance Futures taker · "+data.takerBps.toFixed(2)+" б.п. · "+new Date(data.updatedAt).toLocaleTimeString("ru-RU");
+      $("feeInput").value=String(Number((data.takerBps/100).toFixed(4)));
+      label.textContent="Binance Futures taker · "+(data.takerBps/100).toFixed(2)+"% · "+new Date(data.updatedAt).toLocaleTimeString("ru-RU");
       saveSession();
     }catch(error){
       label.textContent="Ошибка: "+error.message;
