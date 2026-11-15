@@ -123,7 +123,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
   var cfg=null, state=null, orderId=0, uiTimer=0;
   var sideNames={long:"LONG",short:"SHORT"};
-  var MAX_OPEN_PER_SIDE=20, MAX_OPEN_TOTAL=40, MAX_FULL_HOLD_MS=60000;
+  var MAX_OPEN_PER_SIDE=20, MAX_OPEN_TOTAL=40, MAX_FULL_HOLD_MS=60000, STOP_REENTRY_COOLDOWN_MS=60000;
 
   function blankState(balance){
     return {
@@ -326,6 +326,9 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       }else if(net<=-cfg.stopLossUsd){
         closeAllPositions(price,"Стоп-лосс корзины",ts);
         state.fullSince=0;
+        state.reentryUntil=ts+STOP_REENTRY_COOLDOWN_MS;
+        state.sides.long.pending=[];state.sides.short.pending=[];
+        addEvent("Пауза после стоп-лосса","—",price,0,null,"Повторный вход приостановлен на 60 секунд",ts);
       }else{
         var atCapacity=openCount>=MAX_OPEN_TOTAL ||
           state.sides.long.positions.length>=MAX_OPEN_PER_SIDE ||
@@ -354,8 +357,14 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     if(!state.initialized)initGrids(price,ts);
     else if(running && !state.halted){
       checkBasket(price,ts);
-      if(running && !state.halted){processEntries("long",price,ts);processEntries("short",price,ts);}
-      if(running && !state.halted && Date.now()-(state.lastGridRefreshAt||0)>=1000){
+      if(state.reentryUntil && ts>=state.reentryUntil){
+        state.reentryUntil=0;
+        placeGrid("long",price);placeGrid("short",price);state.lastGridRefreshAt=Date.now();
+        addEvent("Пауза завершена","LONG / SHORT",price,cfg.levels*2,null,"Сетка заново выставлена вокруг текущей цены",ts);
+      }
+      var reentryBlocked=Boolean(state.reentryUntil && ts<state.reentryUntil);
+      if(running && !state.halted && !reentryBlocked){processEntries("long",price,ts);processEntries("short",price,ts);}
+      if(running && !state.halted && !reentryBlocked && Date.now()-(state.lastGridRefreshAt||0)>=1000){
         placeGrid("long",price);placeGrid("short",price);state.lastGridRefreshAt=Date.now();
         addEvent("Сетка обновлена","LONG / SHORT",price,cfg.levels*2,null,"Центр перемещён к текущей цене",ts);
       }
