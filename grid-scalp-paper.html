@@ -83,7 +83,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       <label>Остановка сессии при убытке, %<input id="sessionLossInput" type="number" min="0.5" step="0.5" value="2"></label>
       <label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="500" step="1" value="500"></label>
     </div>
-    <p class="muted" id="costNote">Заданный шаг автоматически увеличивается, если он меньше расчётных расходов на вход/выход и цели корзины. Фактический шаг отображается над графиком. Проскальзывание — оценка симуляции, а не значение Binance.</p>
+    <p class="muted" id="costNote">Шаг сетки соответствует введённому значению и не увеличивается автоматически. Комиссия и проскальзывание учитываются отдельно при расчёте результата каждой виртуальной сделки.</p>
     <div class="actions">
       <button id="feeFetchButton">Получить комиссию Binance</button>
       <button class="primary" id="startButton">Запустить PAPER</button>
@@ -118,8 +118,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   var $ = function(id){ return document.getElementById(id); };
   var FEED = "wss://stream.binance.com:9443/ws/btcusdt@trade";
   var FEE_API = "https://hopemanity-binance-fees.hopemanity-fees.workers.dev/commission";
-  var LOG_KEY = "hopemanity_csv_stop_grid_events_v2";
-  var SESSION_KEY = "hopemanity_csv_stop_grid_session_v1";
+  var LOG_KEY = "hopemanity_csv_stop_grid_events_v3";
+  var SESSION_KEY = "hopemanity_csv_stop_grid_session_v3";
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
   var cfg=null, state=null, orderId=0, uiTimer=0;
   var sideNames={long:"LONG",short:"SHORT"};
@@ -250,10 +250,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     return state.sides[s].positions.reduce(function(a,p){return a+markedPositionPnl(p,marketPrice);},0);
   }
   function effectiveStepUsd(center){
-    if(!cfg||!center)return cfg?cfg.stepUsd:0;
-    var roundTripCostPerBtc=center*2*(cfg.feeRate+cfg.slipRate);
-    var targetPerOrder=cfg.profitUsd/cfg.orderQty;
-    return Math.max(cfg.stepUsd,roundTripCostPerBtc+targetPerOrder);
+    return cfg?cfg.stepUsd:0;
   }
   function placeGrid(s,center){
     var dir=s==="long"?1:-1,side=state.sides[s];
@@ -370,11 +367,10 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       }
       var reentryBlocked=Boolean(state.reentryUntil && ts<state.reentryUntil);
       if(running && !state.halted && !reentryBlocked){processEntries("long",price,ts);processEntries("short",price,ts);}
-      var gridRange=effectiveStepUsd(price)*cfg.levels;
-      var gridDrift=Math.max(Math.abs(price-(state.sides.long.center||price)),Math.abs(price-(state.sides.short.center||price)));
-      if(running && !state.halted && !reentryBlocked && openPositionCount()===0 && gridDrift>=gridRange){
-        placeGrid("long",price);placeGrid("short",price);state.lastGridRefreshAt=Date.now();
-        addEvent("Сетка переставлена","LONG / SHORT",price,cfg.levels*2,null,"Цена вышла за полный диапазон сетки",ts);
+      var refreshNow=Date.now();
+      if(running && !state.halted && !reentryBlocked && refreshNow-(state.lastGridRefreshAt||0)>=1000){
+        placeGrid("long",price);placeGrid("short",price);state.lastGridRefreshAt=refreshNow;
+        addEvent("Сетка обновлена","LONG / SHORT",price,cfg.levels*2,null,"Обновлена вокруг текущей цены",ts);
       }
     }
     if(Date.now()-(state.lastSavedAt||0)>=1000){state.lastSavedAt=Date.now();saveSession();}
