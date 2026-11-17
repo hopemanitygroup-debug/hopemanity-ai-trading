@@ -77,7 +77,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </section>
 
   <section class="card" id="leagueCard">
-    <div class="row"><h2>Лига 60 PAPER-ботов</h2><button id="resetLeagueButton">Сбросить лигу</button></div>
+    <div class="row"><h2>Лига 60 PAPER-ботов</h2><div class="actions"><button id="keep20Button">Оставить до 20 прибыльных</button><button id="resetLeagueButton">Сбросить лигу</button></div></div>
     <p class="muted">60 независимых симуляторов на одном потоке BTC: 20 трендовых, 20 импульсных и 20 возвратных стратегий с разными параметрами. У каждого отдельный виртуальный баланс (1/60 общего), позиция, журнал сделок и просадка. Размер сделки ограничен настройкой суммы позиции и долей баланса бота. Комиссия и проскальзывание учитываются. Это эксперимент, доходность не гарантируется; реальные ордера не отправляются.</p>
     <div class="metrics">
       <div class="metric"><label>Ботов в PAPER-лиге</label><div class="value" id="leagueCount">60</div><small>20 тренд · 20 импульс · 20 возврат</small></div>
@@ -157,7 +157,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     for(i=0;i<20;i++)bots.push({id:"T"+String(i+1).padStart(2,"0"),family:"Тренд",fastSec:5+(i%5)*4,slowSec:30+Math.floor(i/5)*20,threshold:0.00005+(i%4)*0.00005});
     for(i=0;i<20;i++)bots.push({id:"M"+String(i+1).padStart(2,"0"),family:"Импульс",lookbackSec:5+(i%5)*5,threshold:0.0001+Math.floor(i/5)*0.0001});
     for(i=0;i<20;i++)bots.push({id:"R"+String(i+1).padStart(2,"0"),family:"Возврат",lookbackSec:20+(i%5)*10,threshold:0.0001+Math.floor(i/5)*0.0001});
-    return bots.map(function(b){b.allocation=balance/60;b.realized=0;b.position=null;b.lastSignal="WAIT";b.closedTrades=0;b.wins=0;b.losses=0;b.peakEquity=b.allocation;b.maxDrawdown=0;b.lastAction="Ожидание данных";return b;});
+    return bots.map(function(b){b.allocation=balance/60;b.enabled=true;b.realized=0;b.position=null;b.lastSignal="WAIT";b.closedTrades=0;b.wins=0;b.losses=0;b.peakEquity=b.allocation;b.maxDrawdown=0;b.lastAction="Ожидание данных";return b;});
   }
   function blankBotLeague(balance){return {startBalance:balance,bots:makeLeagueProfiles(balance),history:[],lastSampleAt:0,startedAt:0};}
   function blankState(balance){
@@ -443,7 +443,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         else if(net<=-Math.min(cfg.stopLossUsd,bot.allocation*cfg.sessionLossPct/100))closeLeaguePosition(bot,price,"аварийный стоп позиции");
         else if(side&&side!==bot.position.side&&net>0)closeLeaguePosition(bot,price,"смена сигнала с прибылью");
       }
-      if(!bot.position&&side&&sig!==bot.lastSignal)openLeaguePosition(bot,side,price,ts);
+      if(!bot.position&&bot.enabled&&side&&sig!==bot.lastSignal)openLeaguePosition(bot,side,price,ts);
       bot.lastSignal=sig;
       var equity=bot.allocation+leagueBotPnl(bot,price);if(equity>bot.peakEquity)bot.peakEquity=equity;
       var dd=bot.peakEquity>0?(bot.peakEquity-equity)/bot.peakEquity*100:0;if(dd>bot.maxDrawdown)bot.maxDrawdown=dd;
@@ -463,7 +463,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("leagueProfitNote").textContent=botLeague.startedAt?"Запущено "+new Date(botLeague.startedAt).toLocaleString("ru-RU")+" · плюс считается после расходов":"Запустите PAPER, чтобы начать сбор статистики";
     $("leagueTable").innerHTML=rows.map(function(x,i){var b=x.bot,sig=leagueSignal(b,price||0,Date.now(),botLeague.history);
       var params=b.family==="Тренд"?"быстр. "+b.fastSec+"с / медл. "+b.slowSec+"с / порог "+(b.threshold*100).toFixed(3)+"%":"окно "+b.lookbackSec+"с / порог "+(b.threshold*100).toFixed(3)+"%";
-      return "<tr><td>"+(i+1)+"</td><td>"+b.id+"</td><td>"+b.family+" · "+params+"</td><td>"+sig+"</td><td>"+b.closedTrades+"</td><td>"+b.wins+" / "+b.losses+"</td><td class=\""+(x.pnl>=0?"positive":"negative")+"\">"+money(x.pnl)+"</td><td>"+b.maxDrawdown.toFixed(2)+"%</td><td>"+(b.position?(b.position.side==="long"?"LONG":"SHORT")+" · "+money(b.position.notional):"—")+"</td></tr>";
+      return "<tr><td>"+(i+1)+"</td><td>"+b.id+(b.enabled?"":" · OFF")+"</td><td>"+b.family+" · "+params+"</td><td>"+sig+"</td><td>"+b.closedTrades+"</td><td>"+b.wins+" / "+b.losses+"</td><td class=\""+(x.pnl>=0?"positive":"negative")+"\">"+money(x.pnl)+"</td><td>"+b.maxDrawdown.toFixed(2)+"%</td><td>"+(b.position?(b.position.side==="long"?"LONG":"SHORT")+" · "+money(b.position.notional):"—")+"</td></tr>";
     }).join("");
   }
   function minuteNetPnl(){
@@ -745,6 +745,14 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   $("exportJournalButton").addEventListener("click",exportJournal);
   $("resetButton").addEventListener("click",function(){resetPaper();});
   $("resetCompareButton").addEventListener("click",function(){if(running){alert("Сначала останови PAPER, затем сбрось сравнение.");return;}signalSim=blankSignalSim(state.startBalance);saveSession();render();});
+  $("keep20Button").addEventListener("click",function(){
+    if(running){alert("Сначала останови PAPER, затем выбери прибыльных ботов.");return;}
+    var ranked=botLeague.bots.map(function(b){return {bot:b,pnl:leagueBotPnl(b,state.lastPrice)};}).filter(function(x){return x.pnl>0;}).sort(function(a,b){return b.pnl-a.pnl;});
+    var selected=ranked.slice(0,20).map(function(x){return x.bot.id;});
+    botLeague.bots.forEach(function(b){b.enabled=selected.indexOf(b.id)>=0;});
+    saveSession();render();
+    alert(selected.length?"Оставлено новых входов у "+selected.length+" прибыльных ботов. Остальные больше не открывают позиции; их уже открытые виртуальные позиции продолжают управляться по правилам PAPER.":"Пока нет ботов с положительным чистым P&L. Никого не отключал.");
+  });
   $("resetLeagueButton").addEventListener("click",function(){if(running){alert("Сначала останови PAPER, затем сбрось лигу.");return;}botLeague=blankBotLeague(state.startBalance);saveSession();render();});
   window.addEventListener("resize",function(){drawChart();});
   state=blankState(Number($("balanceInput").value)||10000);
