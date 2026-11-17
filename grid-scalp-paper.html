@@ -51,16 +51,16 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </div>
 </header>
 <main>
-  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Одновременно допускается максимум 80 открытых позиций: до 40 LONG и до 40 SHORT. Каждая позиция закрывается при чистой прибыли от <span id="profitNotice">$0,01</span>. При убытке корзины <span id="stopNotice">$10,00</span> срабатывает стоп. Цель минуты — <span id="minuteTargetNotice">$1,00</span> по equity после расходов; при достижении новые входы ждут следующей минуты. Реальные ордера не отправляются.</div>
+  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Одновременно допускается максимум 80 открытых позиций: до 40 LONG и до 40 SHORT. Каждая позиция закрывается при чистой прибыли от <span id="profitNotice">$0,01</span>. При убытке корзины <span id="stopNotice">$10,00</span> срабатывает стоп. Реальные ордера не отправляются.</div>
 
   <section class="metrics">
     <div class="metric"><label>BTCUSDT</label><div class="value" id="price">—</div><small id="feedLag">Ожидание котировки</small></div>
     <div class="metric"><label>Виртуальная equity</label><div class="value" id="equity">—</div><small id="balanceLabel">Баланс PAPER</small></div>
     <div class="metric"><label>Чистый PAPER P&amp;L</label><div class="value" id="pnl">—</div><small>С учётом заданных комиссий и проскальзывания</small></div>
     <div class="metric"><label>Открытые позиции</label><div class="value" id="openCount">0 / 80</div><small id="openExposure">Экспозиция $0</small></div>
-    <div class="metric"><label>P&amp;L за минуту (изменение equity)</label><div class="value" id="minutePnl">—</div><small id="minuteState">Минутный отчёт не закрывает позиции</small></div>
+    <div class="metric"><label>Время работы PAPER</label><div class="value" id="runtime">00:00:00</div><small id="runtimeDetail">Накопленное время PAPER</small></div>
     <div class="metric"><label>Ожидающие уровни</label><div class="value" id="pendingCount">0</div><small id="pendingDetail">Buy 0 · Sell 0</small></div>
-    <div class="metric"><label>Позиций закрыто за минуту</label><div class="value" id="closedPerMinute">0</div><small id="basketsPerMinute">Закрыто позиций: 0</small></div>
+    
   </section>
 
 
@@ -80,12 +80,11 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       <label>Комиссия за сторону, %<input id="feeInput" type="number" min="0" step="0.01" value="0.05"><small id="feeSource">Ручная настройка · стандартный taker</small></label>
       <label>Проскальзывание за сторону, %<input id="slippageInput" type="number" min="0" step="0.01" value="0.02"></label>
       <label>Минимальная чистая прибыль позиции, USDT<input id="profitInput" type="number" min="0.01" step="0.01" value="0.01"></label>
-      <label>Цель чистого P&amp;L за минуту, USDT<input id="minuteTargetInput" type="number" min="0.01" step="0.1" value="1"></label>
       <label>Стоп-лосс корзины, USDT<input id="stopLossInput" type="number" min="0.01" step="0.5" value="10"></label>
       <label>Остановка сессии при убытке, %<input id="sessionLossInput" type="number" min="0.5" step="0.5" value="2"></label>
       <label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="500" step="1" value="100"></label>
     </div>
-    <p class="muted" id="costNote">Новая PAPER-логика: индивидуальное закрытие позиции по чистой прибыли, минутная цель считается по изменению equity с учётом открытых позиций и расходов. Тайм-аут больше не закрывает корзину принудительно.</p>
+    <p class="muted" id="costNote">Каждая позиция закрывается при достижении заданной чистой прибыли. Время работы PAPER накапливается только пока симуляция запущена.</p>
     <div class="actions">
       <button id="feeFetchButton">Получить комиссию Binance</button>
       <button class="primary" id="startButton">Запустить PAPER</button>
@@ -137,9 +136,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function blankState(balance){
     return {
       startBalance:balance,realized:0,peakEquity:balance,maxDrawdown:0,lastPrice:0,lastTradeTime:0,lastTickAt:0,
-      tickCount:0,events:[],prices:[],closedOrderTimes:[],closedBasketTimes:[],
+      tickCount:0,events:[],prices:[],runStartedAt:null,runActiveMs:0,runLastStartedAt:null,
       sides:{long:{pending:[],positions:[],center:0},short:{pending:[],positions:[],center:0}},
-      minuteWindowStart:null,minuteStartEquity:null,lastMinutePnl:0,minuteGoalHit:false,
       initialized:false,halted:false,haltReason:""
     };
   }
@@ -152,7 +150,6 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       feeBps:Number($("feeInput").value)*100,
       slipBps:Number($("slippageInput").value)*100,
       profitUsd:Number($("profitInput").value),
-      minuteTargetUsd:Number($("minuteTargetInput").value),
       stopLossUsd:Number($("stopLossInput").value),
       sessionLossPct:Number($("sessionLossInput").value),
       exposurePct:Number($("exposureInput").value)
@@ -160,7 +157,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     var vals=Object.keys(c).map(function(k){return c[k];});
     if(vals.some(function(x){return !Number.isFinite(x);}) ||
        c.startBalance<=0 || c.positionUsd<=0 || c.levels<1 || c.levels>20 ||
-       c.stepUsd<=0 || c.feeBps<0 || c.slipBps<0 || c.profitUsd<=0 || c.minuteTargetUsd<=0 || c.stopLossUsd<=0 ||
+       c.stepUsd<=0 || c.feeBps<0 || c.slipBps<0 || c.profitUsd<=0 || c.stopLossUsd<=0 ||
        c.sessionLossPct<=0 || c.exposurePct<=0 || c.exposurePct>500){
       throw new Error("Проверь настройки: значения должны быть положительными, уровней — от 1 до 20.");
     }
@@ -171,8 +168,9 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function money(x){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(x);}
   function priceText(x){return x>0?new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}).format(x):"—";}
   function timeText(ms){return new Date(ms).toLocaleTimeString("ru-RU",{hour12:false});}
+  function durationText(ms){var sec=Math.floor(Math.max(0,ms)/1000),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");}
   function settingsSnapshot(){
-    var ids=["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","minuteTargetInput","stopLossInput","sessionLossInput","exposureInput"];
+    var ids=["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"];
     var settings={};ids.forEach(function(id){settings[id]=$(id).value;});return settings;
   }
   function saveSession(){
@@ -191,6 +189,9 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         Object.keys(saved.settings).forEach(function(id){if($(id))$(id).value=saved.settings[id];});
       }
       state=saved.state;orderId=Number(saved.orderId)||0;
+      state.runActiveMs=Number(state.runActiveMs)||0;
+      if(state.runLastStartedAt){state.runActiveMs+=Math.max(0,(Number(saved.savedAt)||Date.now())-Number(state.runLastStartedAt));state.runLastStartedAt=null;}
+      if(!("runStartedAt" in state))state.runStartedAt=null;
 
       try{cfg=readConfig();}catch(e){cfg=saved.cfg||null;}
       lockInputs(state.initialized&&!state.halted);
@@ -310,7 +311,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     if(!p)return 0;
     var net=markedPositionPnl(p,price);
     side.positions.splice(index,1);
-    state.realized+=net;state.closedOrderTimes.push(Date.now());
+    state.realized+=net;
     addEvent("Позиция закрыта",sideNames[s],price,1,net,reason,ts);
     return net;
   }
@@ -325,7 +326,6 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       }
     });
     if(count){
-      state.closedBasketTimes.push(Date.now());
       addEvent("Корзина закрыта","LONG / SHORT",price,count,total,reason,ts);
     }
     return total;
@@ -341,39 +341,6 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     });
   }
 
-  function minuteNetPnl(){
-    if(!Number.isFinite(state.minuteStartEquity))return 0;
-    return currentEquity()-state.minuteStartEquity;
-  }
-  function advanceMinute(price,ts){
-    var bucket=Math.floor(ts/60000)*60000;
-    if(!Number.isFinite(state.minuteWindowStart)){
-      state.minuteWindowStart=bucket;
-      state.minuteStartEquity=currentEquity();
-      state.minuteGoalHit=false;
-      return;
-    }
-    if(bucket<=state.minuteWindowStart)return;
-    var previousPnl=minuteNetPnl(),wasPaused=state.minuteGoalHit;
-    state.lastMinutePnl=previousPnl;
-    addEvent("Итог минуты","—",price,0,previousPnl,wasPaused?"Цель достигнута; открытые позиции оставлены":"Цель не достигнута; минутный итог — только отчёт, позиции оставлены",ts);
-    state.minuteWindowStart=bucket;
-    state.minuteStartEquity=currentEquity();
-    state.minuteGoalHit=false;
-    if(wasPaused){
-      placeGrid("long",price);placeGrid("short",price);state.lastGridRefreshAt=Date.now();
-      addEvent("Входы возобновлены","LONG / SHORT",price,cfg.levels*2,null,"Началась новая минута",ts);
-    }
-  }
-  function checkMinuteGoal(price,ts){
-    if(state.minuteGoalHit || !Number.isFinite(state.minuteStartEquity))return;
-    if(minuteNetPnl()>=cfg.minuteTargetUsd){
-      state.sides.long.pending=[];state.sides.short.pending=[];
-      state.minuteGoalHit=true;
-      state.lastMinutePnl=minuteNetPnl();
-      addEvent("Цель минуты достигнута","—",price,0,state.lastMinutePnl,"Новые входы приостановлены до следующей минуты; открытые позиции оставлены",ts);
-    }
-  }
   function checkBasket(price,ts){
     if(openPositionCount() && currentFloating()<=-cfg.stopLossUsd){
       closeAllPositions(price,"Стоп-лосс корзины",ts);
@@ -393,33 +360,30 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     state.prices.push(price);if(state.prices.length>240)state.prices.shift();
     if(!state.initialized){
       initGrids(price,ts);
-      advanceMinute(price,ts);
     }else if(running && !state.halted){
-      advanceMinute(price,ts);
       checkBasket(price,ts);
       if(running && !state.halted)closeProfitablePositions(price,ts);
-      if(running && !state.halted)checkMinuteGoal(price,ts);
       if(state.reentryUntil && ts>=state.reentryUntil){
         state.reentryUntil=0;
         placeGrid("long",price);placeGrid("short",price);state.lastGridRefreshAt=Date.now();
         addEvent("Пауза завершена","LONG / SHORT",price,cfg.levels*2,null,"Сетка заново выставлена вокруг текущей цены",ts);
       }
       var reentryBlocked=Boolean(state.reentryUntil && ts<state.reentryUntil);
-      if(running && !state.halted && !reentryBlocked && !state.minuteGoalHit &&
+      if(running && !state.halted && !reentryBlocked &&
          openPositionCount()<MAX_OPEN_TOTAL &&
          state.sides.long.pending.length===0 && state.sides.short.pending.length===0){
         placeGrid("long",price);placeGrid("short",price);
         state.lastGridRefreshAt=Date.now();
         addEvent("Сетка восстановлена","LONG / SHORT",price,cfg.levels*2,null,"Пустая сетка восстановлена вокруг текущей цены",ts);
       }
-      if(running && !state.halted && !reentryBlocked && !state.minuteGoalHit && openPositionCount()<MAX_OPEN_TOTAL){
+      if(running && !state.halted && !reentryBlocked && openPositionCount()<MAX_OPEN_TOTAL){
         processEntries("long",price,ts);processEntries("short",price,ts);
       }
       if(openPositionCount()>=MAX_OPEN_TOTAL){
         state.sides.long.pending=[];state.sides.short.pending=[];
       }
       var refreshNow=Date.now();
-      if(running && !state.halted && !reentryBlocked && !state.minuteGoalHit &&
+      if(running && !state.halted && !reentryBlocked &&
          openPositionCount()<MAX_OPEN_TOTAL && refreshNow-(state.lastGridRefreshAt||0)>=1000){
         placeGrid("long",price);placeGrid("short",price);state.lastGridRefreshAt=refreshNow;
         addEvent("Сетка обновлена","LONG / SHORT",price,cfg.levels*2,null,"Обновлена вокруг текущей цены",ts);
@@ -480,6 +444,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     reconnectTimer=setTimeout(function(){reconnectTimer=null;connect();},wait);
   }
   function stopPaper(fromRisk){
+    if(state.runLastStartedAt){state.runActiveMs=(Number(state.runActiveMs)||0)+Math.max(0,Date.now()-Number(state.runLastStartedAt));state.runLastStartedAt=null;}
     running=false;connected=false;
     if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}
     var old=socket;socket=null;
@@ -489,7 +454,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     lockInputs(state.initialized&&!state.halted);saveSession();render();
   }
   function lockInputs(lock){
-    ["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","minuteTargetInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=lock;});
+    ["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=lock;});
   }
   function startPaper(){
     if(running)return;
@@ -501,6 +466,9 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     }
     if(!state.initialized){state=blankState(cfg.startBalance);}
     else if(Math.abs(cfg.startBalance-state.startBalance)>0.001){alert("Баланс PAPER уже задан. Сбрось симуляцию, чтобы изменить его.");return;}
+    var now=Date.now();
+    if(!state.runStartedAt)state.runStartedAt=now;
+    if(!state.runLastStartedAt)state.runLastStartedAt=now;
     running=true;reconnectDelay=1000;lockInputs(true);
     $("startButton").disabled=true;$("stopButton").disabled=false;
     saveSession();connect();render();
@@ -520,9 +488,6 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     setStatus("Не запущен","");
     saveSession();render();
   }
-  function pruneTimes(arr,now){
-    while(arr.length&&now-arr[0]>60000)arr.shift();
-  }
   function render(){
     if(!state)return;
     var price=state.lastPrice,open=0,floating=0,pendingLong=state.sides.long.pending.length,pendingShort=state.sides.short.pending.length;
@@ -535,20 +500,16 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("openCount").textContent=String(open)+" / "+MAX_OPEN_TOTAL;$("openExposure").textContent="Экспозиция "+money(currentExposure());
     $("pendingCount").textContent=String(pendingLong+pendingShort);
     $("pendingDetail").textContent="Buy Stop "+pendingLong+" · Sell Stop "+pendingShort;
-    var now=Date.now();pruneTimes(state.closedOrderTimes,now);pruneTimes(state.closedBasketTimes,now);
-    $("closedPerMinute").textContent=String(state.closedOrderTimes.length);
-    $("basketsPerMinute").textContent="Закрыто позиций: "+state.closedBasketTimes.length;
+    var now=Date.now();
+    var runtimeMs=(Number(state.runActiveMs)||0)+(running&&state.runLastStartedAt?Math.max(0,now-Number(state.runLastStartedAt)):0);
+    $("runtime").textContent=durationText(runtimeMs);
+    $("runtimeDetail").textContent=running?"PAPER сейчас работает":"Накопленное время PAPER";
     var currentStep=cfg&&price?effectiveStepUsd(price):(cfg?cfg.stepUsd:0);
     $("effectiveStep").textContent=currentStep?"Шаг с учётом расходов: "+priceText(currentStep):"Шаг сетки: —";
     var positionUsd=Number($("positionUsdInput").value)||0;
     $("positionPreview").textContent=price&&positionUsd?"Примерно "+(positionUsd/price).toFixed(6)+" BTC по текущей цене.":"Объём в BTC будет рассчитан автоматически по текущей цене.";
     $("profitNotice").textContent=money(Number($("profitInput").value)||0);
     $("stopNotice").textContent=money(Number($("stopLossInput").value)||0);
-    $("minuteTargetNotice").textContent=money(Number($("minuteTargetInput").value)||0);
-    var minutePnlValue=Number.isFinite(state.minuteStartEquity)?minuteNetPnl():0;
-    $("minutePnl").textContent=Number.isFinite(state.minuteStartEquity)?money(minutePnlValue):"—";
-    $("minutePnl").className="value "+(minutePnlValue>=0?"positive":"negative");
-    $("minuteState").textContent=state.minuteGoalHit?"Цель достигнута · новые входы на паузе, позиции остаются":"Отчёт equity, позиции не закрываются по минуте";
     $("longPnl").textContent=price?money(basketPnl("long",price)):"—";
     $("shortPnl").textContent=price?money(basketPnl("short",price)):"—";
     $("longPnl").className=basketPnl("long",price)>=0?"positive":"negative";
