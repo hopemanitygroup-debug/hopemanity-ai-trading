@@ -78,7 +78,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
 
   <section class="card" id="leagueCard">
     <div class="row"><h2>Лига 60 PAPER-ботов</h2><div class="actions"><button id="keep20Button">Оставить до 20 прибыльных</button><button id="resetLeagueButton">Сбросить лигу</button></div></div>
-    <p class="muted">60 независимых симуляторов на одном потоке BTC: 20 трендовых, 20 импульсных и 20 возвратных стратегий с разными параметрами. У каждого отдельный виртуальный баланс (1/60 общего), позиция, журнал сделок и просадка. Размер сделки ограничен настройкой суммы позиции и долей баланса бота. Комиссия и проскальзывание учитываются. Это эксперимент, доходность не гарантируется; реальные ордера не отправляются.</p>
+    <p class="muted">60 независимых симуляторов на одном потоке BTC: 20 трендовых, 20 импульсных и 20 возвратных стратегий с разными параметрами. У каждого отдельный виртуальный баланс (1/60 общего), позиция, журнал сделок и просадка. Размер сделки ограничен настройкой суммы позиции и долей баланса бота. Комиссия и проскальзывание учитываются. При лимите потерь бота новые входы для него отключаются. Это эксперимент, доходность не гарантируется; реальные ордера не отправляются.</p>
     <div class="metrics">
       <div class="metric"><label>Ботов в PAPER-лиге</label><div class="value" id="leagueCount">60</div><small>20 тренд · 20 импульс · 20 возврат</small></div>
       <div class="metric"><label>Боты с плюсом после расходов</label><div class="value" id="leagueProfitable">0 / 60</div><small id="leagueProfitNote">Учитывается текущий P&amp;L открытых сделок</small></div>
@@ -444,6 +444,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         else if(side&&side!==bot.position.side&&net>0)closeLeaguePosition(bot,price,"смена сигнала с прибылью");
       }
       if(!bot.position&&bot.enabled&&side&&sig!==bot.lastSignal)openLeaguePosition(bot,side,price,ts);
+      if(bot.enabled&&!bot.position&&bot.realized<=-bot.allocation*cfg.sessionLossPct/100){bot.enabled=false;bot.lastAction="Остановлен по лимиту убытка PAPER";}
       bot.lastSignal=sig;
       var equity=bot.allocation+leagueBotPnl(bot,price);if(equity>bot.peakEquity)bot.peakEquity=equity;
       var dd=bot.peakEquity>0?(bot.peakEquity-equity)/bot.peakEquity*100:0;if(dd>bot.maxDrawdown)bot.maxDrawdown=dd;
