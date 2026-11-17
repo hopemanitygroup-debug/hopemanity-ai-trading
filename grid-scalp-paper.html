@@ -65,7 +65,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
 
   <section class="card">
     <div class="row"><h2>Сравнение PAPER: старая сетка и вход по сигналу</h2><button id="resetCompareButton">Сбросить сравнение</button></div>
-    <p class="muted">Обе стратегии работают параллельно на одном потоке BTC и используют одинаковые сумму позиции, комиссию и проскальзывание. Сигнал строится по средней цене за 10 и 30 секунд; сигнальная модель держит максимум одну позицию и выходит по чистой цели, стопу или обратному сигналу. Это прозрачный технический индикатор, не ИИ-прогноз.</p>
+    <p class="muted">Обе стратегии работают параллельно на одном потоке BTC и используют одинаковые сумму позиции, комиссию и проскальзывание. Сигнал строится по средней цене за 10 и 30 секунд; сигнальная модель держит максимум одну позицию и закрывает по чистой цели, при обратном сигнале — только если уже есть плюс. Аварийный стоп может закрыть в минус. Это технический индикатор, не ИИ-прогноз.</p>
     <div class="metrics">
       <div class="metric"><label>Сигнал сейчас</label><div class="value" id="compareSignal">WAIT</div><small id="compareWarmup">Ожидание данных · 30 секунд</small></div>
       <div class="metric"><label>Сетка · чистый P&amp;L</label><div class="value" id="compareGridPnl">—</div><small id="compareGridTrades">Закрыто сделок: 0</small></div>
@@ -374,7 +374,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       var net=signalPositionPnl(s.position,price);
       if(net>=cfg.profitUsd)signalClose(price,"цель чистой прибыли");
       else if(net<=-cfg.stopLossUsd)signalClose(price,"стоп позиции");
-      else if(side&&side!==s.position.side)signalClose(price,"обратный сигнал");
+      else if(side&&side!==s.position.side&&net>0)signalClose(price,"обратный сигнал · закрытие только с плюсом");
     }
     if(!s.position&&side&&side!==s.lastSignal)signalOpen(side,price,ts);
     s.lastSignal=side||"WAIT";
@@ -409,11 +409,10 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function checkMinuteGoal(price,ts){
     if(state.minuteGoalHit || !Number.isFinite(state.minuteStartEquity))return;
     if(minuteNetPnl()>=cfg.minuteTargetUsd){
-      closeAllPositions(price,"Цель чистого P&L за минуту",ts);
       state.sides.long.pending=[];state.sides.short.pending=[];
       state.minuteGoalHit=true;
       state.lastMinutePnl=minuteNetPnl();
-      addEvent("Цель минуты достигнута","—",price,0,state.lastMinutePnl,"Новые входы приостановлены до следующей минуты",ts);
+      addEvent("Цель минуты достигнута","—",price,0,state.lastMinutePnl,"Новые входы приостановлены до следующей минуты; открытые позиции оставлены",ts);
     }
   }
   function checkBasket(price,ts){
