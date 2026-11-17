@@ -75,6 +75,25 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     <div class="scroll"><table><thead><tr><th>Место</th><th>Бот</th><th>Стратегия / параметры</th><th>Сигнал</th><th>Сделки</th><th>Плюс / минус</th><th>Чистый P&amp;L</th><th>Просадка</th><th>Позиция</th></tr></thead><tbody id="leagueTable"><tr><td colspan="9" class="empty">Лига готова к запуску PAPER.</td></tr></tbody></table></div>
   </section>
 
+  <section class="card" id="singleTestCard">
+    <div class="row"><h2>PAPER-тест: одна позиция по сигналу</h2><span class="pill" id="singleTestStatus">Тест остановлен</span></div>
+    <p class="muted">Отдельная симуляция на публичном потоке реальных цен BTCUSDT; запуск теста сам по себе не запускает сетку или лигу. Сигнал — EMA 10/30 по закрытым минутным свечам; сначала нужно дождаться 30 свечей. Одновременно открыта максимум одна виртуальная позиция. Цель и стоп считаются после комиссии и проскальзывания из настроек выше. После двух стопов подряд тест остановится.</p>
+    <div class="controls">
+      <label>Объём позиции, USDT<input id="singleNotionalInput" type="number" min="5" step="5" value="500"></label>
+      <label>Цель чистой прибыли, USDT<input id="singleTargetInput" type="number" min="0.01" step="0.1" value="1"></label>
+      <label>Стоп чистого убытка, USDT<input id="singleStopInput" type="number" min="0.01" step="0.1" value="2"></label>
+      <label>Остановить после стопов подряд<input id="singleMaxLossesInput" type="number" min="1" max="10" step="1" value="2"></label>
+    </div>
+    <div class="metrics">
+      <div class="metric"><label>Сигнал EMA</label><div class="value" id="singleSignal">WAIT</div><small id="singleSignalDetail">Нужно дождаться закрытых минутных свечей</small></div>
+      <div class="metric"><label>Чистый P&amp;L теста</label><div class="value" id="singlePnl">$0.00</div><small>Закрытые сделки и текущая позиция</small></div>
+      <div class="metric"><label>Позиция</label><div class="value" id="singlePosition">Нет</div><small id="singlePositionDetail">Ожидание сигнала</small></div>
+      <div class="metric"><label>Сделки · плюс / минус</label><div class="value" id="singleTrades">0 · 0 / 0</div><small id="singleStreak">Стопов подряд: 0</small></div>
+    </div>
+    <div class="actions"><button class="primary" id="singleStartButton">Запустить тест 1 позиции</button><button id="singleStopButton" disabled>Остановить тест</button><button id="singleResetButton">Сбросить результат теста</button></div>
+    <div class="scroll" style="margin-top:12px"><table><thead><tr><th>Закрыта</th><th>Сторона</th><th>Сумма</th><th>Вход</th><th>Выход</th><th>Чистый P&amp;L</th><th>Причина</th></tr></thead><tbody id="singleTradesRows"><tr><td colspan="7" class="empty">Сделок теста пока нет.</td></tr></tbody></table></div>
+  </section>
+
   <section class="card">
     <div class="row"><h2>Поток цены</h2><span class="pill" id="effectiveStep">Шаг сетки: —</span></div>
     <canvas id="chart"></canvas>
@@ -141,6 +160,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   var SESSION_KEY = "hopemanity_csv_stop_grid_session_v8";
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
   var cfg=null, state=null, botLeague=null, leagueNeedsReset=false, orderId=0, uiTimer=0;
+  var singleTest=blankSingleTest();
   var sideNames={long:"LONG",short:"SHORT"};
   var MAX_OPEN_PER_SIDE=40, MAX_OPEN_TOTAL=80, STOP_REENTRY_COOLDOWN_MS=60000;
 
@@ -168,6 +188,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       initialized:false,halted:false,haltReason:""
     };
   }
+  function blankSingleTest(){return {active:false,signal:"WAIT",signalText:"Нужно дождаться закрытых минутных свечей",barBucket:null,barClose:0,emaFast:null,emaSlow:null,bars:0,position:null,realized:0,trades:[],wins:0,losses:0,lossStreak:0,stopped:false,stopReason:"",lastSavedAt:0};}
   function readConfig(){
     var c={
       startBalance:Number($("balanceInput").value),
@@ -203,20 +224,27 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function saveSession(){
     if(!state)return;
     try{
-      localStorage.setItem(SESSION_KEY,JSON.stringify({version:2,savedAt:Date.now(),settings:settingsSnapshot(),cfg:cfg,orderId:orderId,state:state,botLeague:botLeague}));
+      localStorage.setItem(SESSION_KEY,JSON.stringify({version:3,savedAt:Date.now(),settings:settingsSnapshot(),cfg:cfg,orderId:orderId,state:state,botLeague:botLeague,singleTest:singleTest}));
       localStorage.setItem(LOG_KEY,JSON.stringify(state.events||[]));
     }catch(e){}
   }
   function restoreSession(){
     try{
       var saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");
-      if(!saved||![1,2].includes(saved.version)||!saved.state||!saved.state.sides)return false;
+      if(!saved||![1,2,3].includes(saved.version)||!saved.state||!saved.state.sides)return false;
       if(saved.settings){
         if(saved.version===1){["feeInput","slippageInput"].forEach(function(id){if(saved.settings[id]!=null)saved.settings[id]=String(Number(saved.settings[id])/100);});saved.version=2;}
         Object.keys(saved.settings).forEach(function(id){if($(id))$(id).value=saved.settings[id];});
       }
       state=saved.state;orderId=Number(saved.orderId)||0;
       botLeague=saved.botLeague&&Array.isArray(saved.botLeague.bots)&&saved.botLeague.bots.length===60?saved.botLeague:blankBotLeague(state.startBalance);
+      if(saved.singleTest&&typeof saved.singleTest==="object"){
+        singleTest=Object.assign(blankSingleTest(),saved.singleTest);singleTest.active=false;
+        if(singleTest.notional)$("singleNotionalInput").value=singleTest.notional;
+        if(singleTest.target)$("singleTargetInput").value=singleTest.target;
+        if(singleTest.stop)$("singleStopInput").value=singleTest.stop;
+        if(singleTest.maxLosses)$("singleMaxLossesInput").value=singleTest.maxLosses;
+      }
       leagueNeedsReset=!botLeague.pairedDirections;
       try{cfg=readConfig();}catch(e){cfg=saved.cfg||null;}
       lockInputs(state.initialized&&!state.halted);
@@ -234,6 +262,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       settings:settingsSnapshot(),
       state:state,
       botLeague:botLeague,
+      singleTest:singleTest,
       orderId:orderId
     };
     var blob=new Blob([JSON.stringify(snapshot,null,2)],{type:"application/json"});
@@ -251,6 +280,9 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         e.price?Number(e.price).toFixed(2):"",e.count,
         e.pnl==null?"":Number(e.pnl).toFixed(2),e.reason
       ].map(cell).join(";"));
+    });
+    if(singleTest&&Array.isArray(singleTest.trades))singleTest.trades.slice().reverse().forEach(function(t){
+      lines.push([new Date(t.time).toISOString(),"PAPER-тест · закрыта позиция",t.side==="long"?"LONG":"SHORT",Number(t.exitPrice).toFixed(2),1,Number(t.netPnl).toFixed(2),"Объём "+Number(t.notional).toFixed(2)+" · вход "+Number(t.entryPrice).toFixed(2)+" · "+t.reason+" · EMA 10/30"].map(cell).join(";"));
     });
     if(botLeague&&Array.isArray(botLeague.bots)){
       var exportTime=new Date().toISOString(),mark=state.lastPrice||0;
@@ -422,6 +454,52 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       var dd=bot.peakEquity>0?(bot.peakEquity-equity)/bot.peakEquity*100:0;if(dd>bot.maxDrawdown)bot.maxDrawdown=dd;
     });
   }
+  function singleTestConfig(){
+    var c={notional:Number($("singleNotionalInput").value),target:Number($("singleTargetInput").value),stop:Number($("singleStopInput").value),maxLosses:Math.floor(Number($("singleMaxLossesInput").value))};
+    if(!Object.keys(c).every(function(k){return Number.isFinite(c[k]);})||c.notional<=0||c.target<=0||c.stop<=0||c.maxLosses<1||c.maxLosses>10)throw new Error("Проверь объём, цель, стоп и лимит стопов теста.");
+    return c;
+  }
+  function singleTestPnl(price){return singleTest.realized+(singleTest.position&&price?markedPositionPnl(singleTest.position,price):0);}
+  function openSingleTestPosition(side,price,ts){
+    var fill=price*(side==="long"?1+cfg.slipRate:1-cfg.slipRate),qty=singleTest.notional/fill;
+    singleTest.position={side:side,qty:qty,notional:singleTest.notional,entryPrice:fill,entryFee:singleTest.notional*cfg.feeRate,openedAt:ts};
+    addEvent("Открыта позиция · EMA тест",sideNames[side],fill,1,null,"Одна позиция · сигнал EMA 10/30",ts);
+  }
+  function closeSingleTestPosition(price,reason,ts){
+    var p=singleTest.position;if(!p)return 0;
+    var net=markedPositionPnl(p,price);
+    singleTest.realized+=net;
+    singleTest.trades.unshift({time:ts||Date.now(),side:p.side,notional:p.notional,entryPrice:p.entryPrice,exitPrice:price,netPnl:net,reason:reason,openedAt:p.openedAt});
+    if(singleTest.trades.length>500)singleTest.trades.length=500;
+    singleTest.wins+=net>0?1:0;singleTest.losses+=net<=0?1:0;
+    singleTest.lossStreak=net<=0?singleTest.lossStreak+1:0;
+    singleTest.position=null;
+    addEvent("Закрыта позиция · EMA тест",sideNames[p.side],price,1,net,reason,ts);
+    if(net<=0&&singleTest.lossStreak>=singleTest.maxLosses){singleTest.active=false;singleTest.stopped=true;singleTest.stopReason="Достигнут лимит стопов подряд";}
+    return net;
+  }
+  function updateSingleSignal(ts,price){
+    var bucket=Math.floor(ts/60000)*60000;
+    if(singleTest.barBucket==null){singleTest.barBucket=bucket;singleTest.barClose=price;return;}
+    if(bucket>singleTest.barBucket){
+      var close=singleTest.barClose;
+      if(singleTest.emaFast==null){singleTest.emaFast=close;singleTest.emaSlow=close;singleTest.bars=1;}
+      else{singleTest.emaFast+=(2/11)*(close-singleTest.emaFast);singleTest.emaSlow+=(2/31)*(close-singleTest.emaSlow);singleTest.bars++;}
+      if(singleTest.bars>=30)singleTest.signal=singleTest.emaFast>singleTest.emaSlow?"LONG":singleTest.emaFast<singleTest.emaSlow?"SHORT":"WAIT";
+      singleTest.signalText=singleTest.bars>=30?"EMA10 "+priceText(singleTest.emaFast)+" · EMA30 "+priceText(singleTest.emaSlow):"Свечей для EMA30: "+singleTest.bars+" / 30";
+      singleTest.barBucket=bucket;singleTest.barClose=price;
+    }else if(bucket===singleTest.barBucket){singleTest.barClose=price;}
+  }
+  function processSingleTest(price,ts){
+    updateSingleSignal(ts,price);
+    if(singleTest.position){
+      var net=markedPositionPnl(singleTest.position,price);
+      if(net>=singleTest.target)closeSingleTestPosition(price,"Цель чистой прибыли",ts);
+      else if(net<=-singleTest.stop)closeSingleTestPosition(price,"Стоп чистого убытка",ts);
+    }
+    if(singleTest.active&&!singleTest.position&&singleTest.signal!=="WAIT")openSingleTestPosition(singleTest.signal==="LONG"?"long":"short",price,ts);
+    if(!singleTest.active&&!running&&socket){var idleSocket=socket;socket=null;connected=false;try{idleSocket.close();}catch(e){}setStatus("Тест остановлен","");}
+  }
   function renderBotLeague(price){
     if(!botLeague)return;
     var rows=botLeague.bots.map(function(b){return {bot:b,pnl:leagueBotPnl(b,price)};}).sort(function(a,b){return b.pnl-a.pnl;});
@@ -489,7 +567,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function onTrade(price,ts){
     state.lastPrice=price;state.lastTradeTime=ts;state.lastTickAt=Date.now();state.tickCount++;
     state.prices.push(price);if(state.prices.length>240)state.prices.shift();
-    if(!state.initialized){
+    if(!state.initialized&&running){
       initGrids(price,ts);
       advanceMinute(price,ts);
     }else if(running && !state.halted){
@@ -524,6 +602,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       }
     }
     if(running&&!state.halted&&cfg)processBotLeague(price,ts);
+    if(singleTest.active&&cfg)processSingleTest(price,ts);
      if(!Number.isFinite(state.peakEquity))state.peakEquity=state.startBalance;
      var gridEq=currentEquity();if(gridEq>state.peakEquity)state.peakEquity=gridEq;
      var gridDd=state.peakEquity>0?(state.peakEquity-gridEq)/state.peakEquity*100:0;
@@ -552,13 +631,13 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("statusDot").className="dot"+(mode?" "+mode:"");
   }
   function connect(){
-    if(!running)return;
+    if(!running&&!singleTest.active)return;
     setStatus("Подключение к потоку…","");
     try{
       var ws=new WebSocket(FEED);socket=ws;
-      ws.onopen=function(){if(!running){ws.close();return;}connected=true;reconnectDelay=1000;setStatus("Поток подключён","good");render();};
+      ws.onopen=function(){if(!running&&!singleTest.active){ws.close();return;}connected=true;reconnectDelay=1000;setStatus("Поток подключён","good");render();};
       ws.onmessage=function(event){
-        if(!running)return;
+        if(!running&&!singleTest.active)return;
         try{
           var data=JSON.parse(event.data),price=Number(data.p),ts=Number(data.T||Date.now());
           if(Number.isFinite(price)&&price>0)onTrade(price,ts);
@@ -567,24 +646,23 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       ws.onerror=function(){setStatus("Ошибка потока; переподключение…","bad");};
       ws.onclose=function(){
         if(socket===ws)socket=null;connected=false;
-        if(running){setStatus("Поток прерван; переподключение…","bad");scheduleReconnect();}
+        if(running||singleTest.active){setStatus("Поток прерван; переподключение…","bad");scheduleReconnect();}
         else if(!state.halted)setStatus("Остановлен","");render();
       };
     }catch(e){setStatus("Не удалось открыть поток","bad");scheduleReconnect();}
   }
   function scheduleReconnect(){
-    if(!running||reconnectTimer)return;
+    if((!running&&!singleTest.active)||reconnectTimer)return;
     var wait=reconnectDelay;reconnectDelay=Math.min(30000,reconnectDelay*2);
     reconnectTimer=setTimeout(function(){reconnectTimer=null;connect();},wait);
   }
   function stopPaper(fromRisk){
     running=false;connected=false;
     if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}
-    var old=socket;socket=null;
-    if(old){try{old.close();}catch(e){}}
-    if(!fromRisk&&!state.halted)setStatus("Остановлен","");
+    if(!singleTest.active){var old=socket;socket=null;if(old){try{old.close();}catch(e){}}}
+    if(!fromRisk&&!state.halted)setStatus(singleTest.active?"Поток подключён · тест 1 позиции":"Остановлен",singleTest.active?"good":"");
     $("startButton").disabled=false;$("stopButton").disabled=true;
-    lockInputs(state.initialized&&!state.halted);saveSession();render();
+    lockInputs(Boolean(running||singleTest.active));saveSession();render();
   }
   function lockInputs(lock){
     ["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","minuteTargetInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=lock;});
@@ -601,7 +679,35 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     else if(Math.abs(cfg.startBalance-state.startBalance)>0.001){alert("Баланс PAPER уже задан. Сбрось симуляцию, чтобы изменить его.");return;}
     running=true;reconnectDelay=1000;lockInputs(true);
     $("startButton").disabled=true;$("stopButton").disabled=false;
-    saveSession();connect();render();
+    saveSession();if(!socket)connect();render();
+  }
+  function startSingleTest(){
+    if(singleTest.active)return;
+    try{cfg=readConfig();var params=singleTestConfig();if(singleTest.stopped){alert("Тест остановлен после серии убытков. Сначала сбрось результат теста.");return;}if(!singleTest.position){singleTest.notional=params.notional;singleTest.target=params.target;singleTest.stop=params.stop;singleTest.maxLosses=params.maxLosses;}}
+    catch(e){alert(e.message);return;}
+    singleTest.active=true;$("singleStartButton").disabled=true;$("singleStopButton").disabled=false;lockInputs(true);
+    ["singleNotionalInput","singleTargetInput","singleStopInput","singleMaxLossesInput"].forEach(function(id){$(id).disabled=true;});
+    if(!running&&!socket){reconnectDelay=1000;connect();}
+    saveSession();render();
+  }
+  function stopSingleTest(){
+    if(!singleTest.active)return;
+    if(singleTest.position&&state.lastPrice)closeSingleTestPosition(state.lastPrice,"Тест остановлен вручную",Date.now());
+    singleTest.active=false;singleTest.stopReason="Остановлен вручную";
+    $("singleStartButton").disabled=false;$("singleStopButton").disabled=true;
+    lockInputs(Boolean(running));
+    ["singleNotionalInput","singleTargetInput","singleStopInput","singleMaxLossesInput"].forEach(function(id){$(id).disabled=false;});
+    if(!running){if(socket){try{socket.close();}catch(e){}socket=null;}connected=false;setStatus("Остановлен","");}
+    saveSession();render();
+  }
+  function resetSingleTest(){
+    if(!confirm("Сбросить только статистику PAPER-теста одной позиции? Сетка и лига останутся без изменений."))return;
+    if(singleTest.active&&singleTest.position&&state.lastPrice)closeSingleTestPosition(state.lastPrice,"Закрыта при сбросе PAPER-теста",Date.now());
+    singleTest=blankSingleTest();
+    ["singleNotionalInput","singleTargetInput","singleStopInput","singleMaxLossesInput"].forEach(function(id){$(id).disabled=false;});
+    $("singleStartButton").disabled=false;$("singleStopButton").disabled=true;
+    if(!running&&socket){try{socket.close();}catch(e){}socket=null;connected=false;setStatus("Остановлен","");}
+    saveSession();render();
   }
   function flattenAll(reason){
     if(!state.lastPrice)return;
@@ -609,6 +715,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     render();
   }
   function resetPaper(){
+    if(singleTest.active)stopSingleTest();
     stopPaper(false);
     var balance=Number($("balanceInput").value);
     if(!Number.isFinite(balance)||balance<=0){alert("Укажи положительный виртуальный баланс.");return;}
@@ -656,7 +763,22 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("feedLag").textContent=state.lastTickAt?"Тиков получено: "+state.tickCount+" · задержка данных "+Math.max(0,Date.now()-state.lastTradeTime)+" мс":"Ожидание котировки";
     $("lastTick").textContent=state.lastTickAt?"Последний тик: "+timeText(state.lastTickAt):"Последний тик: —";
     $("eventCount").textContent=state.events.length+" событий";
-    renderOpenPositions(price);renderPendingOrders(price);renderJournal();renderBotLeague(price);drawChart();
+    renderOpenPositions(price);renderPendingOrders(price);renderJournal();renderBotLeague(price);renderSingleTest(price);drawChart();
+  }
+  function renderSingleTest(price){
+    var pnl=singleTestPnl(price),p=singleTest.position;
+    $("singleTestStatus").textContent=singleTest.active?"Тест активен · PAPER":singleTest.stopped?"Автостоп · "+singleTest.stopReason:"Тест остановлен";
+    $("singleSignal").textContent=singleTest.signal||"WAIT";
+    $("singleSignal").className="value "+(singleTest.signal==="LONG"?"positive":singleTest.signal==="SHORT"?"negative":"");
+    $("singleSignalDetail").textContent=singleTest.signalText||"Нужно дождаться закрытых минутных свечей";
+    $("singlePnl").textContent=money(pnl);$("singlePnl").className="value "+(pnl>=0?"positive":"negative");
+    $("singlePosition").textContent=p?(p.side==="long"?"LONG":"SHORT")+" · "+money(p.notional):"Нет";
+    $("singlePositionDetail").textContent=p?"Вход "+priceText(p.entryPrice)+" · чистый P&L "+money(markedPositionPnl(p,price||p.entryPrice)):singleTest.active?"Ожидание сигнала":"Открытой позиции нет";
+    $("singleTrades").textContent=singleTest.trades.length+" · "+singleTest.wins+" / "+singleTest.losses;
+    $("singleStreak").textContent="Стопов подряд: "+singleTest.lossStreak+" / "+(singleTest.maxLosses||Number($("singleMaxLossesInput").value)||2);
+    if(!singleTest.active){$("singleStartButton").disabled=false;$("singleStopButton").disabled=true;["singleNotionalInput","singleTargetInput","singleStopInput","singleMaxLossesInput"].forEach(function(id){$(id).disabled=false;});lockInputs(Boolean(running));}
+    if(!singleTest.trades.length){$("singleTradesRows").innerHTML='<tr><td colspan="7" class="empty">Сделок теста пока нет.</td></tr>';return;}
+    $("singleTradesRows").innerHTML=singleTest.trades.slice(0,30).map(function(t){return "<tr><td>"+timeText(t.time)+"</td><td class=\""+(t.side==="long"?"positive":"negative")+"\">"+(t.side==="long"?"LONG":"SHORT")+"</td><td>"+money(t.notional)+"</td><td>"+priceText(t.entryPrice)+"</td><td>"+priceText(t.exitPrice)+"</td><td class=\""+(t.netPnl>=0?"positive":"negative")+"\">"+money(t.netPnl)+"</td><td>"+t.reason+"</td></tr>";}).join("");
   }
   function renderOpenPositions(price){
     var rows=[];
@@ -732,6 +854,9 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     alert(selected.length?"Оставлено новых входов у "+selected.length+" прибыльных ботов. Остальные больше не открывают позиции; их уже открытые виртуальные позиции продолжают управляться по правилам PAPER.":"Пока нет ботов с положительным чистым P&L. Никого не отключал.");
   });
   $("resetLeagueButton").addEventListener("click",function(){if(running){alert("Сначала останови PAPER, затем сбрось лигу.");return;}botLeague=blankBotLeague(state.startBalance);leagueNeedsReset=false;saveSession();render();});
+  $("singleStartButton").addEventListener("click",startSingleTest);
+  $("singleStopButton").addEventListener("click",stopSingleTest);
+  $("singleResetButton").addEventListener("click",resetSingleTest);
   window.addEventListener("resize",function(){drawChart();});
   state=blankState(Number($("balanceInput").value)||10000);
   botLeague=blankBotLeague(Number($("balanceInput").value)||10000);
