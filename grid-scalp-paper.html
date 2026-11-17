@@ -75,7 +75,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     <div class="controls">
       <label>Виртуальный баланс, USDT<input id="balanceInput" type="number" min="100" step="100" value="10000"></label>
       <label>Сумма одной позиции, USDT<input id="positionUsdInput" type="number" min="5" step="5" value="100"><small id="positionPreview">Объём в BTC будет рассчитан автоматически по текущей цене.</small></label>
-      <label>Уровней на сторону<input id="levelsInput" type="number" min="1" max="20" step="1" value="20"></label>
+      <label>Уровней на сторону<input id="levelsInput" type="number" min="1" max="50" step="1" value="50"></label>
       <label>Шаг уровня по CSV, USD<input id="stepInput" type="number" min="0.01" step="1" value="120"></label>
       <label>Комиссия за сторону, %<input id="feeInput" type="number" min="0" step="0.01" value="0.05"><small id="feeSource">Ручная настройка · стандартный taker</small></label>
       <label>Проскальзывание за сторону, %<input id="slippageInput" type="number" min="0" step="0.01" value="0.02"></label>
@@ -162,10 +162,10 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     };
     var vals=Object.keys(c).map(function(k){return c[k];});
     if(vals.some(function(x){return !Number.isFinite(x);}) ||
-       c.startBalance<=0 || c.positionUsd<=0 || c.levels<1 || c.levels>20 ||
+       c.startBalance<=0 || c.positionUsd<=0 || c.levels<1 || c.levels>50 ||
        c.stepUsd<=0 || c.feeBps<0 || c.slipBps<0 || c.profitUsd<=0 || c.stopLossUsd<=0 ||
        c.sessionLossPct<=0 || c.exposurePct<=0 || c.exposurePct>500){
-      throw new Error("Проверь настройки: значения должны быть положительными, уровней — от 1 до 20.");
+      throw new Error("Проверь настройки: значения должны быть положительными, уровней — от 1 до 50.");
     }
     c.feeRate=c.feeBps/10000;
     c.slipRate=c.slipBps/10000;
@@ -195,6 +195,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         Object.keys(saved.settings).forEach(function(id){if($(id))$(id).value=saved.settings[id];});
       }
       state=saved.state;orderId=Number(saved.orderId)||0;
+      if(!state.initialized && saved.settings && String(saved.settings.levelsInput)==="20")$("levelsInput").value="50";
       state.runActiveMs=Number(state.runActiveMs)||0;
       if(!Array.isArray(state.closedPositions))state.closedPositions=[];
       if(state.runLastStartedAt){state.runActiveMs+=Math.max(0,(Number(saved.savedAt)||Date.now())-Number(state.runLastStartedAt));state.runLastStartedAt=null;}
