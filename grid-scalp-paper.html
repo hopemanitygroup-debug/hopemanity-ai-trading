@@ -63,19 +63,6 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     <div class="metric"><label>Позиций закрыто за минуту</label><div class="value" id="closedPerMinute">0</div><small id="basketsPerMinute">Закрыто позиций: 0</small></div>
   </section>
 
-  <section class="card">
-    <div class="row"><h2>Сравнение PAPER: старая сетка и вход по сигналу</h2><button id="resetCompareButton">Сбросить сравнение</button></div>
-    <p class="muted">Обе стратегии работают параллельно на одном потоке BTC и используют одинаковые сумму позиции, комиссию и проскальзывание. Сигнал строится по средней цене за 10 и 30 секунд; сигнальная модель держит максимум одну позицию и закрывает по чистой цели, при обратном сигнале — только если уже есть плюс. Аварийный стоп может закрыть в минус. Это технический индикатор, не ИИ-прогноз.</p>
-    <div class="metrics">
-      <div class="metric"><label>Сигнал сейчас</label><div class="value" id="compareSignal">WAIT</div><small id="compareWarmup">Ожидание данных · 30 секунд</small></div>
-      <div class="metric"><label>Сетка · чистый P&amp;L</label><div class="value" id="compareGridPnl">—</div><small id="compareGridTrades">Закрыто сделок: 0</small></div>
-      <div class="metric"><label>Сетка · макс. просадка</label><div class="value" id="compareGridDd">0.00%</div><small>От максимума equity</small></div>
-      <div class="metric"><label>Сигнал · чистый P&amp;L</label><div class="value" id="compareSignalPnl">—</div><small id="compareSignalAction">Пока без сделок</small></div>
-      <div class="metric"><label>Сигнал · закрыто сделок</label><div class="value" id="compareSignalTrades">0</div><small id="compareSignalWins">Плюсовых: 0</small></div>
-      <div class="metric"><label>Сигнал · макс. просадка</label><div class="value" id="compareSignalDd">0.00%</div><small id="compareSignalPosition">Позиция не открыта</small></div>
-    </div>
-  </section>
-
   <section class="card" id="leagueCard">
     <div class="row"><h2>Лига 60 PAPER-ботов</h2><div class="actions"><button id="keep20Button">Оставить до 20 прибыльных</button><button id="resetLeagueButton">Сбросить лигу</button></div></div>
     <p class="muted">60 независимых симуляторов на одном потоке BTC: 10 парных наборов для тренда, импульса и возврата к средней; в каждой паре один бот торгует по сигналу, второй — в обратную сторону. У каждого отдельный виртуальный баланс (1/60 общего), позиция, журнал сделок и просадка. Размер сделки ограничен настройкой суммы позиции и долей баланса бота. Комиссия и проскальзывание учитываются. При лимите потерь бота новые входы для него отключаются. Это эксперимент, доходность не гарантируется; реальные ордера не отправляются.</p>
@@ -147,11 +134,10 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   var LOG_KEY = "hopemanity_csv_stop_grid_events_v8";
   var SESSION_KEY = "hopemanity_csv_stop_grid_session_v8";
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
-  var cfg=null, state=null, signalSim=null, botLeague=null, leagueNeedsReset=false, orderId=0, uiTimer=0;
+  var cfg=null, state=null, botLeague=null, leagueNeedsReset=false, orderId=0, uiTimer=0;
   var sideNames={long:"LONG",short:"SHORT"};
   var MAX_OPEN_PER_SIDE=20, MAX_OPEN_TOTAL=40, STOP_REENTRY_COOLDOWN_MS=60000;
 
-  function blankSignalSim(balance){return {startBalance:balance,realized:0,position:null,history:[],closedTrades:0,wins:0,losses:0,peakEquity:balance,maxDrawdown:0,lastSignal:"WAIT",currentSignal:"WAIT",lastAction:"Пока без сделок",lastSampleAt:0};}
   function makeLeagueProfiles(balance){
     var bots=[],i,j;
     for(i=0;i<20;i++)bots.push({id:"T"+String(i+1).padStart(2,"0"),family:"Тренд",fastSec:5+(i%5)*4,slowSec:30+Math.floor(i/5)*20,threshold:0.00005+(i%4)*0.00005});
@@ -211,7 +197,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function saveSession(){
     if(!state)return;
     try{
-      localStorage.setItem(SESSION_KEY,JSON.stringify({version:2,savedAt:Date.now(),settings:settingsSnapshot(),cfg:cfg,orderId:orderId,state:state,signalSim:signalSim,botLeague:botLeague}));
+      localStorage.setItem(SESSION_KEY,JSON.stringify({version:2,savedAt:Date.now(),settings:settingsSnapshot(),cfg:cfg,orderId:orderId,state:state,botLeague:botLeague}));
       localStorage.setItem(LOG_KEY,JSON.stringify(state.events||[]));
     }catch(e){}
   }
@@ -224,7 +210,6 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         Object.keys(saved.settings).forEach(function(id){if($(id))$(id).value=saved.settings[id];});
       }
       state=saved.state;orderId=Number(saved.orderId)||0;
-      signalSim=saved.signalSim&&Array.isArray(saved.signalSim.history)?saved.signalSim:blankSignalSim(Number($("balanceInput").value)||10000);
       botLeague=saved.botLeague&&Array.isArray(saved.botLeague.bots)&&saved.botLeague.bots.length===60?saved.botLeague:blankBotLeague(state.startBalance);
       leagueNeedsReset=!botLeague.pairedDirections;
       try{cfg=readConfig();}catch(e){cfg=saved.cfg||null;}
@@ -242,7 +227,6 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       autoTrading:false,
       settings:settingsSnapshot(),
       state:state,
-      signalSim:signalSim,
       botLeague:botLeague,
       orderId:orderId
     };
@@ -384,43 +368,6 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         }
       }
     });
-  }
-  function signalPositionPnl(p,price){
-    var exit=price*(p.side==="long"?1-cfg.slipRate:1+cfg.slipRate),gross=p.side==="long"?p.qty*(exit-p.entryPrice):p.qty*(p.entryPrice-exit);
-    return gross-p.entryFee-p.qty*exit*cfg.feeRate;
-  }
-  function signalClose(price,reason){
-    var p=signalSim.position,n=signalPositionPnl(p,price);signalSim.realized+=n;signalSim.closedTrades++;
-    if(n>0)signalSim.wins++;else signalSim.losses++;
-    signalSim.position=null;signalSim.lastAction=sideNames[p.side]+" закрыта · "+money(n)+" · "+reason;
-  }
-  function signalOpen(side,price,ts){
-    var fill=price*(side==="long"?1+cfg.slipRate:1-cfg.slipRate),qty=cfg.positionUsd/fill;
-    signalSim.position={side:side,qty:qty,entryPrice:fill,entryFee:cfg.positionUsd*cfg.feeRate,openedAt:ts};
-    signalSim.lastAction=sideNames[side]+" открыта · "+money(cfg.positionUsd);
-  }
-  function processSignalPaper(price,ts){
-    var s=signalSim;if(!s)return;
-    if(ts-s.lastSampleAt>=1000){s.history.push({t:ts,p:price});s.lastSampleAt=ts;}
-    while(s.history.length&&ts-s.history[0].t>90000)s.history.shift();
-    var fast=s.history.filter(function(x){return ts-x.t<=10000;}),slow=s.history.filter(function(x){return ts-x.t<=30000;});
-    var sig="WAIT";
-    if(slow.length>=25&&ts-slow[0].t>=24000){
-      var f=fast.reduce(function(a,x){return a+x.p;},0)/fast.length,sl=slow.reduce(function(a,x){return a+x.p;},0)/slow.length,g=(f-sl)/sl;
-      if(g>=0.00015)sig="LONG";else if(g<=-0.00015)sig="SHORT";
-    }
-    s.currentSignal=sig;var side=sig==="LONG"?"long":sig==="SHORT"?"short":null;
-    if(s.position){
-      var net=signalPositionPnl(s.position,price);
-      if(net>=cfg.profitUsd)signalClose(price,"цель чистой прибыли");
-      else if(net<=-cfg.stopLossUsd)signalClose(price,"стоп позиции");
-      else if(side&&side!==s.position.side&&net>0)signalClose(price,"обратный сигнал · закрытие только с плюсом");
-    }
-    if(!s.position&&side&&side!==s.lastSignal)signalOpen(side,price,ts);
-    s.lastSignal=side||"WAIT";
-    var eq=s.startBalance+s.realized+(s.position?signalPositionPnl(s.position,price):0);
-    if(eq>s.peakEquity)s.peakEquity=eq;
-    var dd=s.peakEquity?(s.peakEquity-eq)/s.peakEquity*100:0;if(dd>s.maxDrawdown)s.maxDrawdown=dd;
   }
   function leagueSignal(bot,price,ts,history){
     var recent=history.filter(function(x){return ts-x.t<=(bot.family==="Тренд"?bot.slowSec*1000:bot.lookbackSec*1000);});
@@ -570,7 +517,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         addEvent("Сетка обновлена","LONG / SHORT",price,cfg.levels*2,null,"Обновлена вокруг текущей цены",ts);
       }
     }
-    if(running&&!state.halted&&cfg){processSignalPaper(price,ts);processBotLeague(price,ts);}
+    if(running&&!state.halted&&cfg)processBotLeague(price,ts);
      if(!Number.isFinite(state.peakEquity))state.peakEquity=state.startBalance;
      var gridEq=currentEquity();if(gridEq>state.peakEquity)state.peakEquity=gridEq;
      var gridDd=state.peakEquity>0?(state.peakEquity-gridEq)/state.peakEquity*100:0;
@@ -644,7 +591,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     if(openPositionCount()>MAX_OPEN_TOTAL || state.sides.long.positions.length>MAX_OPEN_PER_SIDE || state.sides.short.positions.length>MAX_OPEN_PER_SIDE){
       if(!confirm("В сохранённой сессии уже открыто больше нового лимита (40 всего, по 20 на сторону). Существующие виртуальные позиции останутся под управлением PAPER; новые входы не будут добавляться, пока число открытых позиций не опустится ниже лимита. Продолжить?"))return;
     }
-    if(!state.initialized){state=blankState(cfg.startBalance);signalSim=blankSignalSim(cfg.startBalance);botLeague=blankBotLeague(cfg.startBalance);}
+    if(!state.initialized){state=blankState(cfg.startBalance);botLeague=blankBotLeague(cfg.startBalance);}
     else if(Math.abs(cfg.startBalance-state.startBalance)>0.001){alert("Баланс PAPER уже задан. Сбрось симуляцию, чтобы изменить его.");return;}
     running=true;reconnectDelay=1000;lockInputs(true);
     $("startButton").disabled=true;$("stopButton").disabled=false;
@@ -659,7 +606,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     stopPaper(false);
     var balance=Number($("balanceInput").value);
     if(!Number.isFinite(balance)||balance<=0){alert("Укажи положительный виртуальный баланс.");return;}
-    cfg=null;state=blankState(balance);signalSim=blankSignalSim(balance);botLeague=blankBotLeague(balance);orderId=0;
+    cfg=null;state=blankState(balance);botLeague=blankBotLeague(balance);leagueNeedsReset=false;orderId=0;
     lockInputs(false);
     $("startButton").disabled=false;$("stopButton").disabled=true;
     setStatus("Не запущен","");
@@ -703,21 +650,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("feedLag").textContent=state.lastTickAt?"Тиков получено: "+state.tickCount+" · задержка данных "+Math.max(0,Date.now()-state.lastTradeTime)+" мс":"Ожидание котировки";
     $("lastTick").textContent=state.lastTickAt?"Последний тик: "+timeText(state.lastTickAt):"Последний тик: —";
     $("eventCount").textContent=state.events.length+" событий";
-    renderPendingOrders(price);renderJournal();renderSignalComparison(price,totalPnl);renderBotLeague(price);drawChart();
-  }
-  function renderSignalComparison(price,gridPnl){
-    if(!signalSim)return;
-    var s=signalSim,pnl=s.realized+(s.position&&price?signalPositionPnl(s.position,price):0),el=$("compareSignal");
-    el.textContent=s.currentSignal;el.className="value "+(s.currentSignal==="LONG"?"positive":s.currentSignal==="SHORT"?"negative":"");
-    $("compareWarmup").textContent=s.history.length<25?"Накопление данных · примерно "+Math.max(0,30-s.history.length)+" секунд":"Средняя за 10с сравнивается со средней за 30с";
-    $("compareGridPnl").textContent=money(gridPnl);$("compareGridPnl").className="value "+(gridPnl>=0?"positive":"negative");
-    $("compareGridTrades").textContent="Закрыто сделок: "+state.events.filter(function(e){return e.type==="Позиция закрыта";}).length;
-    $("compareGridDd").textContent=(state.maxDrawdown||0).toFixed(2)+"%";
-    $("compareSignalPnl").textContent=money(pnl);$("compareSignalPnl").className="value "+(pnl>=0?"positive":"negative");
-    $("compareSignalAction").textContent=s.lastAction;$("compareSignalTrades").textContent=String(s.closedTrades);
-    $("compareSignalWins").textContent="Плюсовых: "+s.wins+" · минусовых: "+s.losses;
-    $("compareSignalDd").textContent=s.maxDrawdown.toFixed(2)+"%";
-    $("compareSignalPosition").textContent=s.position?"Открыта "+sideNames[s.position.side]+" · вход "+priceText(s.position.entryPrice):"Позиция не открыта";
+    renderPendingOrders(price);renderJournal();renderBotLeague(price);drawChart();
   }
   function renderPendingOrders(price){
     var rows=[];
@@ -764,7 +697,6 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   $("exportButton").addEventListener("click",exportSession);
   $("exportJournalButton").addEventListener("click",exportJournal);
   $("resetButton").addEventListener("click",function(){resetPaper();});
-  $("resetCompareButton").addEventListener("click",function(){if(running){alert("Сначала останови PAPER, затем сбрось сравнение.");return;}signalSim=blankSignalSim(state.startBalance);saveSession();render();});
   $("keep20Button").addEventListener("click",function(){
     if(running){alert("Сначала останови PAPER, затем выбери прибыльных ботов.");return;}
     if(leagueNeedsReset){alert("Сначала сбрось старую лигу, чтобы включить парное сравнение.");return;}
@@ -777,7 +709,6 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   $("resetLeagueButton").addEventListener("click",function(){if(running){alert("Сначала останови PAPER, затем сбрось лигу.");return;}botLeague=blankBotLeague(state.startBalance);leagueNeedsReset=false;saveSession();render();});
   window.addEventListener("resize",function(){drawChart();});
   state=blankState(Number($("balanceInput").value)||10000);
-  signalSim=blankSignalSim(Number($("balanceInput").value)||10000);
   botLeague=blankBotLeague(Number($("balanceInput").value)||10000);
   try{
     var savedEvents=JSON.parse(localStorage.getItem(LOG_KEY)||"[]");
