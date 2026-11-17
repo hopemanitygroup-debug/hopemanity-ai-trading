@@ -114,6 +114,12 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </section>
 
   <section class="card">
+    <div class="row"><h2>Открытые позиции по отдельности</h2><span class="muted" id="openPositionTableCount">0 позиций</span></div>
+    <p class="muted">Сумма показывает объём позиции при входе. Текущий чистый P&amp;L включает заданные комиссию и проскальзывание. Кнопка закрывает только выбранную виртуальную позицию.</p>
+    <div class="scroll"><table><thead><tr><th>Сторона</th><th>Вход</th><th>Сумма позиции</th><th>Объём BTC</th><th>Чистый P&amp;L сейчас</th><th>Открыта</th><th>Действие</th></tr></thead><tbody id="openPositionRows"><tr><td colspan="7" class="empty">Открытых позиций пока нет.</td></tr></tbody></table></div>
+  </section>
+
+  <section class="card">
     <div class="row"><h2>Текущие отложенные уровни</h2><span class="muted" id="pendingTableCount">0 уровней</span></div>
     <div class="scroll"><table><thead><tr><th>Тип</th><th>Уровень</th><th>Цена ордера</th><th>Расстояние от BTC</th></tr></thead><tbody id="pendingOrders"><tr><td colspan="4" class="empty">Сетка появится после получения котировки.</td></tr></tbody></table></div>
   </section>
@@ -650,7 +656,20 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("feedLag").textContent=state.lastTickAt?"Тиков получено: "+state.tickCount+" · задержка данных "+Math.max(0,Date.now()-state.lastTradeTime)+" мс":"Ожидание котировки";
     $("lastTick").textContent=state.lastTickAt?"Последний тик: "+timeText(state.lastTickAt):"Последний тик: —";
     $("eventCount").textContent=state.events.length+" событий";
-    renderPendingOrders(price);renderJournal();renderBotLeague(price);drawChart();
+    renderOpenPositions(price);renderPendingOrders(price);renderJournal();renderBotLeague(price);drawChart();
+  }
+  function renderOpenPositions(price){
+    var rows=[];
+    ["long","short"].forEach(function(side){
+      state.sides[side].positions.forEach(function(p){rows.push({side:side,p:p});});
+    });
+    rows.sort(function(a,b){return (b.p.openedAt||0)-(a.p.openedAt||0);});
+    $("openPositionTableCount").textContent=rows.length+" / "+MAX_OPEN_TOTAL+" позиций";
+    if(!rows.length){$("openPositionRows").innerHTML='<tr><td colspan="7" class="empty">Открытых позиций пока нет.</td></tr>';return;}
+    $("openPositionRows").innerHTML=rows.map(function(row){
+      var p=row.p,net=price?markedPositionPnl(p,price):0,sideName=sideNames[row.side];
+      return "<tr><td class=\""+(row.side==="long"?"positive":"negative")+"\">"+sideName+"</td><td>"+priceText(p.entryPrice)+"</td><td>"+money(p.notional||p.qty*p.entryPrice)+"</td><td>"+Number(p.qty).toFixed(6)+"</td><td class=\""+(net>=0?"positive":"negative")+"\">"+money(net)+"</td><td>"+timeText(p.openedAt||0)+"</td><td><button data-close-position=\""+row.side+"\" data-position-id=\""+p.id+"\">Закрыть</button></td></tr>";
+    }).join("");
   }
   function renderPendingOrders(price){
     var rows=[];
@@ -694,6 +713,12 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   $("startButton").addEventListener("click",startPaper);
   $("stopButton").addEventListener("click",function(){stopPaper(false);});
   $("flattenButton").addEventListener("click",function(){flattenAll("Закрыто вручную в PAPER");});
+  $("openPositionRows").addEventListener("click",function(event){
+    var button=event.target.closest("button[data-close-position]");if(!button||!state.lastPrice)return;
+    var side=button.getAttribute("data-close-position"),id=Number(button.getAttribute("data-position-id")),positions=state.sides[side].positions;
+    var index=positions.findIndex(function(p){return Number(p.id)===id;});
+    if(index>=0){closePosition(side,index,state.lastPrice,"Закрыта вручную: "+(side==="long"?"LONG":"SHORT"),Date.now());render();}
+  });
   $("exportButton").addEventListener("click",exportSession);
   $("exportJournalButton").addEventListener("click",exportJournal);
   $("resetButton").addEventListener("click",function(){resetPaper();});
