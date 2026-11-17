@@ -68,7 +68,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     <p class="muted">Обе стратегии работают параллельно на одном потоке BTC и используют одинаковые сумму позиции, комиссию и проскальзывание. Сигнал строится по средней цене за 10 и 30 секунд; сигнальная модель держит максимум одну позицию и выходит по чистой цели, стопу или обратному сигналу. Это прозрачный технический индикатор, не ИИ-прогноз.</p>
     <div class="metrics">
       <div class="metric"><label>Сигнал сейчас</label><div class="value" id="compareSignal">WAIT</div><small id="compareWarmup">Ожидание данных · 30 секунд</small></div>
-      <div class="metric"><label>Сетка · чистый P&amp;L</label><div class="value" id="compareGridPnl">—</div><small>С учётом открытых позиций и расходов</small></div>
+      <div class="metric"><label>Сетка · чистый P&amp;L</label><div class="value" id="compareGridPnl">—</div><small id="compareGridTrades">Закрыто сделок: 0</small></div>
+      <div class="metric"><label>Сетка · макс. просадка</label><div class="value" id="compareGridDd">0.00%</div><small>От максимума equity</small></div>
       <div class="metric"><label>Сигнал · чистый P&amp;L</label><div class="value" id="compareSignalPnl">—</div><small id="compareSignalAction">Пока без сделок</small></div>
       <div class="metric"><label>Сигнал · закрыто сделок</label><div class="value" id="compareSignalTrades">0</div><small id="compareSignalWins">Плюсовых: 0</small></div>
       <div class="metric"><label>Сигнал · макс. просадка</label><div class="value" id="compareSignalDd">0.00%</div><small id="compareSignalPosition">Позиция не открыта</small></div>
@@ -141,7 +142,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function blankSignalSim(balance){return {startBalance:balance,realized:0,position:null,history:[],closedTrades:0,wins:0,losses:0,peakEquity:balance,maxDrawdown:0,lastSignal:"WAIT",currentSignal:"WAIT",lastAction:"Пока без сделок",lastSampleAt:0};}
   function blankState(balance){
     return {
-      startBalance:balance,realized:0,lastPrice:0,lastTradeTime:0,lastTickAt:0,
+      startBalance:balance,realized:0,peakEquity:balance,maxDrawdown:0,lastPrice:0,lastTradeTime:0,lastTickAt:0,
       tickCount:0,events:[],prices:[],closedOrderTimes:[],closedBasketTimes:[],
       sides:{long:{pending:[],positions:[],center:0},short:{pending:[],positions:[],center:0}},
       minuteWindowStart:null,minuteStartEquity:null,lastMinutePnl:0,minuteGoalHit:false,
@@ -467,6 +468,10 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       }
     }
     if(running&&!state.halted&&cfg)processSignalPaper(price,ts);
+     if(!Number.isFinite(state.peakEquity))state.peakEquity=state.startBalance;
+     var gridEq=currentEquity();if(gridEq>state.peakEquity)state.peakEquity=gridEq;
+     var gridDd=state.peakEquity>0?(state.peakEquity-gridEq)/state.peakEquity*100:0;
+     if(gridDd>state.maxDrawdown)state.maxDrawdown=gridDd;
      if(Date.now()-(state.lastSavedAt||0)>=1000){state.lastSavedAt=Date.now();saveSession();}
     var now=Date.now();
     if(now-uiTimer>200){uiTimer=now;render();}
@@ -603,6 +608,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     el.textContent=s.currentSignal;el.className="value "+(s.currentSignal==="LONG"?"positive":s.currentSignal==="SHORT"?"negative":"");
     $("compareWarmup").textContent=s.history.length<25?"Накопление данных · примерно "+Math.max(0,30-s.history.length)+" секунд":"Средняя за 10с сравнивается со средней за 30с";
     $("compareGridPnl").textContent=money(gridPnl);$("compareGridPnl").className="value "+(gridPnl>=0?"positive":"negative");
+    $("compareGridTrades").textContent="Закрыто сделок: "+state.events.filter(function(e){return e.type==="Позиция закрыта";}).length;
+    $("compareGridDd").textContent=(state.maxDrawdown||0).toFixed(2)+"%";
     $("compareSignalPnl").textContent=money(pnl);$("compareSignalPnl").className="value "+(pnl>=0?"positive":"negative");
     $("compareSignalAction").textContent=s.lastAction;$("compareSignalTrades").textContent=String(s.closedTrades);
     $("compareSignalWins").textContent="Плюсовых: "+s.wins+" · минусовых: "+s.losses;
