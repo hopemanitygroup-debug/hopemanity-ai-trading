@@ -657,10 +657,11 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     reconnectTimer=setTimeout(function(){reconnectTimer=null;connect();},wait);
   }
   function stopPaper(fromRisk){
-    running=false;connected=false;
-    if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}
+    running=false;
+    if(!singleTest.active&&reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}
+    connected=Boolean(singleTest.active&&socket&&socket.readyState===WebSocket.OPEN);
     if(!singleTest.active){var old=socket;socket=null;if(old){try{old.close();}catch(e){}}}
-    if(!fromRisk&&!state.halted)setStatus(singleTest.active?"Поток подключён · тест 1 позиции":"Остановлен",singleTest.active?"good":"");
+    if(!fromRisk&&!state.halted)setStatus(singleTest.active?(connected?"Поток подключён · тест 1 позиции":"Тест ожидает поток"):"Остановлен",connected?"good":"");
     $("startButton").disabled=false;$("stopButton").disabled=true;
     lockInputs(Boolean(running||singleTest.active));saveSession();render();
   }
