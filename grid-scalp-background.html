@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#07120f">
+<title>HopeManity PAPER · фоновая симуляция</title>
+<style>
+:root{color-scheme:dark;--bg:#07120f;--panel:#10231c;--line:#28513e;--green:#45e3a2;--red:#ff858c;--muted:#9cb9a9;--amber:#ffc66d}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 70% -20%,#164d37 0,transparent 48%),var(--bg);color:#e8fff2;font:15px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+header{padding:18px max(16px,calc((100% - 1120px)/2));border-bottom:1px solid var(--line);background:#091810e8;position:sticky;top:0;z-index:3;backdrop-filter:blur(12px)}
+main{max-width:1120px;margin:auto;padding:18px}.head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-size:22px;margin:0}h2{font-size:18px;margin:0 0 12px}.muted,small{color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;background:#10231c;color:var(--muted)}
+.dot{width:9px;height:9px;border-radius:50%;background:#7e8983}.dot.good{background:var(--green);box-shadow:0 0 10px #45e3a2aa}.dot.bad{background:var(--red)}
+.notice,.card{margin:14px 0;padding:16px;border:1px solid var(--line);border-radius:16px;background:#0f211a}
+.notice{border-color:#876630;background:#2a2113;color:#ffdfa4;line-height:1.5}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:14px 0}
+.metric{padding:14px;border:1px solid var(--line);border-radius:14px;background:#0f211a;min-width:0}
+.metric label{display:block;color:var(--muted);font-size:13px;margin-bottom:7px}.value{font-size:23px;font-weight:750;letter-spacing:.2px;overflow-wrap:anywhere}
+.positive{color:var(--green)}.negative{color:var(--red)}
+.controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+label{display:block;color:var(--muted);font-size:13px}input{display:block;width:100%;margin-top:6px;padding:12px;border:1px solid var(--line);border-radius:11px;background:#091810;color:#e8fff2;font:inherit}
+input:disabled{opacity:.65}button{padding:11px 14px;border:1px solid var(--line);border-radius:11px;background:#142b21;color:#e8fff2;font:inherit;cursor:pointer}
+button.primary{background:#24533c;border-color:#438161;font-weight:700}button.danger{border-color:#7d4149;color:#ffb1b5}button:disabled{opacity:.45;cursor:not-allowed}
+.actions,.row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.actions{margin-top:14px}
+.scroll{overflow:auto;border:1px solid var(--line);border-radius:12px}table{width:100%;border-collapse:collapse;min-width:690px}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #254535;white-space:nowrap}th{color:var(--muted);font-weight:600}tr:last-child td{border-bottom:0}.empty{text-align:center;color:var(--muted);padding:18px}
+footer{max-width:1120px;margin:auto;padding:4px 18px 28px;color:var(--muted);font-size:12px;line-height:1.5}
+@media(max-width:560px){main{padding:12px}.card{padding:13px}.controls{gap:10px}h1{font-size:19px}.value{font-size:20px}input{padding:10px;font-size:14px}button{padding:10px;font-size:14px}}
+</style>
+</head>
+<body>
+<header><div class="head"><div><h1>HopeManity <span style="color:var(--green)">PAPER</span> · фоновая симуляция</h1><div class="muted">BTCUSDT · без реальных ордеров</div></div><span class="pill"><span class="dot" id="statusDot"></span><span id="status">Подключение к серверу…</span></span></div></header>
+<main>
+<div class="notice"><strong>Серверный PAPER-режим.</strong> После запуска симуляция продолжает получать цены и вести виртуальные позиции на сервере, даже если закрыть эту страницу или браузер. Вернитесь по этой же ссылке, чтобы увидеть сессию. Реальные ордера не отправляются. При первом запуске создаётся отдельная серверная PAPER-сессия; старая локальная сессия не переносится.</div>
+
+<section class="metrics">
+<div class="metric"><label>BTCUSDT</label><div class="value" id="price">—</div><small id="feedInfo">Ожидание потока</small></div>
+<div class="metric"><label>Виртуальная equity</label><div class="value" id="equity">—</div><small id="balance">Баланс —</small></div>
+<div class="metric"><label>Чистый PAPER P&amp;L</label><div class="value" id="pnl">—</div><small>С учётом комиссии и проскальзывания</small></div>
+<div class="metric"><label>Открытые позиции</label><div class="value" id="openCount">0 / 80</div><small id="exposure">Экспозиция —</small></div>
+<div class="metric"><label>Время работы PAPER</label><div class="value" id="runtime">00:00:00</div><small id="runtimeDetail">Серверная сессия</small></div>
+<div class="metric"><label>Ожидающие уровни</label><div class="value" id="pendingCount">0</div><small id="pendingDetail">LONG 0 · SHORT 0</small></div>
+<div class="metric"><label>Максимальная просадка</label><div class="value" id="drawdown">0.00%</div><small id="ticks">Тиков: 0</small></div>
+</section>
+
+<section class="card">
+<h2>Настройки PAPER</h2>
+<div class="controls">
+<label>Виртуальный баланс, USDT<input id="balanceInput" type="number" min="100" step="100" value="10000"></label>
+<label>Сумма одной позиции, USDT<input id="positionUsdInput" type="number" min="5" step="5" value="100"></label>
+<label>Уровней на сторону<input id="levelsInput" type="number" min="1" max="50" step="1" value="20"></label>
+<label>Шаг уровня, USD<input id="stepInput" type="number" min="0.01" step="0.01" value="3"></label>
+<label>Комиссия за сторону, %<input id="feeInput" type="number" min="0" step="0.01" value="0.05"></label>
+<label>Проскальзывание за сторону, %<input id="slippageInput" type="number" min="0" step="0.01" value="0.02"></label>
+<label>Минимальная чистая прибыль позиции, USDT<input id="profitInput" type="number" min="0.01" step="0.01" value="0.10"></label>
+<label>Стоп-лосс корзины, USDT<input id="stopLossInput" type="number" min="0.01" step="1" value="10"></label>
+<label>Остановка сессии при убытке, %<input id="sessionLossInput" type="number" min="0.1" step="0.1" value="2"></label>
+<label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="500" step="1" value="100"></label>
+</div>
+<p class="muted">Комиссия и проскальзывание применяются при входе и выходе. Значения нужно указать по вашему тарифу Binance; сервис не отправляет сделки на биржу.</p>
+<div class="actions"><div class="row"><button class="primary" id="startButton">Запустить серверный PAPER</button><button id="stopButton" disabled>Остановить</button><button class="danger" id="flattenButton">Закрыть все виртуальные позиции</button></div><button id="resetButton">Сбросить сессию</button></div>
+<div id="error" class="muted" style="margin-top:10px"></div>
+</section>
+
+<section class="card">
+<div class="row"><h2>Открытые позиции</h2><span class="muted" id="openTableCount">0 позиций</span></div>
+<div class="scroll"><table><thead><tr><th>Сторона</th><th>Вход</th><th>Сумма</th><th>Объём BTC</th><th>Чистый P&amp;L сейчас</th><th>Открыта</th><th>Действие</th></tr></thead><tbody id="openRows"><tr><td colspan="7" class="empty">Открытых позиций нет.</td></tr></tbody></table></div>
+</section>
+<section class="card">
+<div class="row"><h2>Закрытые позиции</h2><span class="muted" id="closedTableCount">0 позиций</span></div>
+<div class="scroll"><table><thead><tr><th>Сторона</th><th>Вход</th><th>Выход</th><th>Сумма</th><th>Объём BTC</th><th>Чистый P&amp;L</th><th>Закрыта</th></tr></thead><tbody id="closedRows"><tr><td colspan="7" class="empty">Закрытых позиций нет.</td></tr></tbody></table></div>
+</section>
+<section class="card">
+<div class="row"><h2>Последние события</h2><span class="muted" id="eventCount">0 событий</span></div>
+<div class="scroll"><table><thead><tr><th>Время</th><th>Событие</th><th>Сторона</th><th>Цена</th><th>Количество</th><th>P&amp;L</th><th>Причина</th></tr></thead><tbody id="events"><tr><td colspan="7" class="empty">Пока нет событий.</td></tr></tbody></table></div>
+</section>
+</main>
+<footer>Серверная симуляция зависит от доступности Cloudflare Workers и публичного потока Binance. При закрытии браузера сервер продолжает работу; чтобы остановить его, нажмите «Остановить» до закрытия страницы или вернитесь позже. PAPER не гарантирует результат реальной торговли.</footer>
+<script>
+(function(){
+"use strict";
+var API="https://hopemanity-paper-background.hopemanity-fees.workers.dev/api/";
+var SID_KEY="hopemanity_paper_background_session_id";
+var SID=localStorage.getItem(SID_KEY);
+if(!SID){SID=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(36).slice(2));localStorage.setItem(SID_KEY,SID);}
+var SESSION_KEY="hopemanity_csv_stop_grid_session_v8";
+var running=false, initialized=false, latest=null, timer=null;
+var $=function(id){return document.getElementById(id);};
+function money(x){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(Number(x)||0);}
+function priceText(x){return Number(x)>0?new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}).format(x):"—";}
+function timeText(ms){return ms?new Date(ms).toLocaleTimeString("ru-RU",{hour12:false}):"—";}
+function duration(ms){var sec=Math.floor(Math.max(0,ms)/1000),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),ss=sec%60;return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+String(ss).padStart(2,"0");}
+function val(id){return Number($(id).value);}
+function config(){return {startBalance:val("balanceInput"),positionUsd:val("positionUsdInput"),levels:val("levelsInput"),stepUsd:val("stepInput"),feePercent:val("feeInput"),slippagePercent:val("slippageInput"),profitUsd:val("profitInput"),stopLossUsd:val("stopLossInput"),sessionLossPct:val("sessionLossInput"),exposurePct:val("exposureInput")};}
+async function call(path,method,body){
+var response=await fetch(API+encodeURIComponent(SID)+path,{method:method||"GET",headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,cache:"no-store"});
+var data=await response.json().catch(function(){return {error:"Сервер вернул некорректный ответ"};});
+if(!response.ok)throw new Error(data.error||("HTTP "+response.status));return data;
+}
+function setError(text){$("error").textContent=text||"";}
+function render(s){
+latest=s;running=Boolean(s.running);initialized=Boolean(s.config);
+$("status").textContent=s.running?(s.connected?"PAPER работает на сервере":"Сервер переподключает поток"):s.halted?"PAPER остановлен по лимиту убытка":s.config?"Сессия сохранена · остановлена":"Не запущен";
+$("statusDot").className="dot"+(s.running&&s.connected?" good":s.halted?" bad":"");
+$("price").textContent=s.price?priceText(s.price):"—";
+$("feedInfo").textContent=s.connected?"Поток Binance подключён · тиков: "+s.tickCount:(s.feedError||"Ожидание потока");
+$("equity").textContent=money(s.equity);$("balance").textContent="Баланс "+money(s.balance);
+$("pnl").textContent=money(s.pnl);$("pnl").className="value "+(s.pnl>=0?"positive":"negative");
+$("equity").className="value "+(s.equity>=s.balance?"positive":"");
+$("openCount").textContent=s.openCount+" / 80";$("exposure").textContent="Экспозиция "+money(s.exposure);
+$("runtime").textContent=duration(s.runtimeMs);$("runtimeDetail").textContent=s.running?"PAPER сейчас работает на сервере":"Накопленное время PAPER";
+$("pendingCount").textContent=s.pendingCount;$("pendingDetail").textContent="LONG "+s.pendingLong+" · SHORT "+s.pendingShort;
+$("drawdown").textContent=(Number(s.maxDrawdown)||0).toFixed(2)+"%";$("ticks").textContent="Тиков: "+s.tickCount;
+$("startButton").disabled=s.running||s.halted||initialized;$("stopButton").disabled=!s.running;
+$("flattenButton").disabled=!s.openCount;
+$("resetButton").disabled=s.running;
+["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=initialized;});
+if(s.config&&!s.running)fillConfig(s.config);
+renderOpen(s.openPositions||[]);renderClosed(s.closedPositions||[]);renderEvents(s.events||[]);
+}
+function fillConfig(c){
+$("balanceInput").value=c.startBalance;$("positionUsdInput").value=c.positionUsd;$("levelsInput").value=c.levels;$("stepInput").value=c.stepUsd;
+$("feeInput").value=c.feePercent;$("slippageInput").value=c.slippagePercent;$("profitInput").value=c.profitUsd;$("stopLossInput").value=c.stopLossUsd;
+$("sessionLossInput").value=c.sessionLossPct;$("exposureInput").value=c.exposurePct;
+}
+function renderOpen(rows){
+$("openTableCount").textContent=rows.length+" позиций";
+if(!rows.length){$("openRows").innerHTML='<tr><td colspan="7" class="empty">Открытых позиций нет.</td></tr>';return;}
+$("openRows").innerHTML=rows.map(function(p){return '<tr><td class="'+(p.side==="long"?"positive":"negative")+'">'+p.side.toUpperCase()+'</td><td>'+priceText(p.entryPrice)+'</td><td>'+money(p.notional)+'</td><td>'+Number(p.qty).toFixed(6)+'</td><td class="'+(p.pnl>=0?"positive":"negative")+'">'+money(p.pnl)+'</td><td>'+timeText(p.openedAt)+'</td><td><button data-close="'+p.id+'">Закрыть</button></td></tr>';}).join("");
+}
+function renderClosed(rows){
+$("closedTableCount").textContent=rows.length+" позиций";
+if(!rows.length){$("closedRows").innerHTML='<tr><td colspan="7" class="empty">Закрытых позиций нет.</td></tr>';return;}
+$("closedRows").innerHTML=rows.slice(0,100).map(function(p){return '<tr><td class="'+(p.side==="long"?"positive":"negative")+'">'+p.side.toUpperCase()+'</td><td>'+priceText(p.entryPrice)+'</td><td>'+priceText(p.exitPrice)+'</td><td>'+money(p.notional)+'</td><td>'+Number(p.qty).toFixed(6)+'</td><td class="'+(p.pnl>=0?"positive":"negative")+'">'+money(p.pnl)+'</td><td>'+timeText(p.closedAt)+'</td></tr>';}).join("");
+}
+function renderEvents(rows){
+$("eventCount").textContent=rows.length+" событий";
+if(!rows.length){$("events").innerHTML='<tr><td colspan="7" class="empty">Пока нет событий.</td></tr>';return;}
+$("events").innerHTML=rows.slice(0,100).map(function(e){return '<tr><td>'+timeText(e.time)+'</td><td>'+e.type+'</td><td>'+e.side+'</td><td>'+priceText(e.price)+'</td><td>'+e.count+'</td><td class="'+(e.pnl==null?"":e.pnl>=0?"positive":"negative")+'">'+(e.pnl==null?"—":money(e.pnl))+'</td><td>'+e.reason+'</td></tr>';}).join("");
+}
+async function poll(){
+try{render(await call("/state"));setError("");}
+catch(e){$("status").textContent="Нет связи с сервером";$("statusDot").className="dot bad";setError(e.message);}
+}
+function importPreviousSettings(){
+try{
+var saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");
+if(!saved||!saved.settings)return;
+var map={balanceInput:"balanceInput",positionUsdInput:"positionUsdInput",levelsInput:"levelsInput",stepInput:"stepInput",feeInput:"feeInput",slippageInput:"slippageInput",profitInput:"profitInput",stopLossInput:"stopLossInput",sessionLossInput:"sessionLossInput",exposureInput:"exposureInput"};
+Object.keys(map).forEach(function(id){if(saved.settings[id]!=null)$(id).value=saved.settings[id];});
+}catch(e){}
+}
+$("startButton").addEventListener("click",async function(){
+try{setError("");await call("/start","POST",{config:config()});await poll();}
+catch(e){setError(e.message);}
+});
+$("stopButton").addEventListener("click",async function(){try{await call("/stop","POST",{});await poll();}catch(e){setError(e.message);}});
+$("flattenButton").addEventListener("click",async function(){if(!confirm("Закрыть все виртуальные позиции по текущей цене?"))return;try{await call("/flatten","POST",{});await poll();}catch(e){setError(e.message);}});
+$("resetButton").addEventListener("click",async function(){if(!confirm("Сбросить серверную PAPER-сессию и удалить её историю?"))return;try{await call("/reset","POST",{startBalance:val("balanceInput")});await poll();}catch(e){setError(e.message);}});
+$("openRows").addEventListener("click",async function(e){var id=e.target&&e.target.getAttribute("data-close");if(!id)return;try{await call("/close/"+id,"POST",{});await poll();}catch(err){setError(err.message);}});
+importPreviousSettings();
+poll();timer=setInterval(poll,1200);
+window.addEventListener("beforeunload",function(){if(timer)clearInterval(timer);});
+})();
+</script>
+</body>
+</html>
