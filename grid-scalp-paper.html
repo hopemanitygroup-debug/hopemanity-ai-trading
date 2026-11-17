@@ -64,6 +64,18 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </section>
 
   <section class="card">
+    <div class="row"><h2>Сравнение PAPER: старая сетка и вход по сигналу</h2><button id="resetCompareButton">Сбросить сравнение</button></div>
+    <p class="muted">Обе стратегии работают параллельно на одном потоке BTC и используют одинаковые сумму позиции, комиссию и проскальзывание. Сигнал строится по средней цене за 10 и 30 секунд; сигнальная модель держит максимум одну позицию и выходит по чистой цели, стопу или обратному сигналу. Это прозрачный технический индикатор, не ИИ-прогноз.</p>
+    <div class="metrics">
+      <div class="metric"><label>Сигнал сейчас</label><div class="value" id="compareSignal">WAIT</div><small id="compareWarmup">Ожидание данных · 30 секунд</small></div>
+      <div class="metric"><label>Сетка · чистый P&amp;L</label><div class="value" id="compareGridPnl">—</div><small>С учётом открытых позиций и расходов</small></div>
+      <div class="metric"><label>Сигнал · чистый P&amp;L</label><div class="value" id="compareSignalPnl">—</div><small id="compareSignalAction">Пока без сделок</small></div>
+      <div class="metric"><label>Сигнал · закрыто сделок</label><div class="value" id="compareSignalTrades">0</div><small id="compareSignalWins">Плюсовых: 0</small></div>
+      <div class="metric"><label>Сигнал · макс. просадка</label><div class="value" id="compareSignalDd">0.00%</div><small id="compareSignalPosition">Позиция не открыта</small></div>
+    </div>
+  </section>
+
+  <section class="card">
     <div class="row"><h2>Поток цены</h2><span class="pill" id="effectiveStep">Шаг сетки: —</span></div>
     <canvas id="chart"></canvas>
     <div class="chart-meta"><span>Последние тики BTCUSDT</span><span id="lastTick">Последний тик: —</span></div>
@@ -122,10 +134,11 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   var LOG_KEY = "hopemanity_csv_stop_grid_events_v8";
   var SESSION_KEY = "hopemanity_csv_stop_grid_session_v8";
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
-  var cfg=null, state=null, orderId=0, uiTimer=0;
+  var cfg=null, state=null, signalSim=null, orderId=0, uiTimer=0;
   var sideNames={long:"LONG",short:"SHORT"};
   var MAX_OPEN_PER_SIDE=40, MAX_OPEN_TOTAL=80, STOP_REENTRY_COOLDOWN_MS=60000;
 
+  function blankSignalSim(balance){return {startBalance:balance,realized:0,position:null,history:[],closedTrades:0,wins:0,losses:0,peakEquity:balance,maxDrawdown:0,lastSignal:"WAIT",currentSignal:"WAIT",lastAction:"Пока без сделок",lastSampleAt:0};}
   function blankState(balance){
     return {
       startBalance:balance,realized:0,lastPrice:0,lastTradeTime:0,lastTickAt:0,
@@ -170,7 +183,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function saveSession(){
     if(!state)return;
     try{
-      localStorage.setItem(SESSION_KEY,JSON.stringify({version:2,savedAt:Date.now(),settings:settingsSnapshot(),cfg:cfg,orderId:orderId,state:state}));
+      localStorage.setItem(SESSION_KEY,JSON.stringify({version:2,savedAt:Date.now(),settings:settingsSnapshot(),cfg:cfg,orderId:orderId,state:state,signalSim:signalSim}));
       localStorage.setItem(LOG_KEY,JSON.stringify(state.events||[]));
     }catch(e){}
   }
@@ -183,6 +196,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         Object.keys(saved.settings).forEach(function(id){if($(id))$(id).value=saved.settings[id];});
       }
       state=saved.state;orderId=Number(saved.orderId)||0;
+      signalSim=saved.signalSim&&Array.isArray(saved.signalSim.history)?saved.signalSim:blankSignalSim(Number($("balanceInput").value)||10000);
       try{cfg=readConfig();}catch(e){cfg=saved.cfg||null;}
       lockInputs(state.initialized&&!state.halted);
       $("startButton").disabled=false;$("stopButton").disabled=true;
@@ -198,6 +212,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       autoTrading:false,
       settings:settingsSnapshot(),
       state:state,
+      signalSim:signalSim,
       orderId:orderId
     };
     var blob=new Blob([JSON.stringify(snapshot,null,2)],{type:"application/json"});
@@ -329,6 +344,43 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       }
     });
   }
+  function signalPositionPnl(p,price){
+    var exit=price*(p.side==="long"?1-cfg.slipRate:1+cfg.slipRate),gross=p.side==="long"?p.qty*(exit-p.entryPrice):p.qty*(p.entryPrice-exit);
+    return gross-p.entryFee-p.qty*exit*cfg.feeRate;
+  }
+  function signalClose(price,reason){
+    var p=signalSim.position,n=signalPositionPnl(p,price);signalSim.realized+=n;signalSim.closedTrades++;
+    if(n>0)signalSim.wins++;else signalSim.losses++;
+    signalSim.position=null;signalSim.lastAction=sideNames[p.side]+" закрыта · "+money(n)+" · "+reason;
+  }
+  function signalOpen(side,price,ts){
+    var fill=price*(side==="long"?1+cfg.slipRate:1-cfg.slipRate),qty=cfg.positionUsd/fill;
+    signalSim.position={side:side,qty:qty,entryPrice:fill,entryFee:cfg.positionUsd*cfg.feeRate,openedAt:ts};
+    signalSim.lastAction=sideNames[side]+" открыта · "+money(cfg.positionUsd);
+  }
+  function processSignalPaper(price,ts){
+    var s=signalSim;if(!s)return;
+    if(ts-s.lastSampleAt>=1000){s.history.push({t:ts,p:price});s.lastSampleAt=ts;}
+    while(s.history.length&&ts-s.history[0].t>90000)s.history.shift();
+    var fast=s.history.filter(function(x){return ts-x.t<=10000;}),slow=s.history.filter(function(x){return ts-x.t<=30000;});
+    var sig="WAIT";
+    if(slow.length>=25&&ts-slow[0].t>=24000){
+      var f=fast.reduce(function(a,x){return a+x.p;},0)/fast.length,sl=slow.reduce(function(a,x){return a+x.p;},0)/slow.length,g=(f-sl)/sl;
+      if(g>=0.00015)sig="LONG";else if(g<=-0.00015)sig="SHORT";
+    }
+    s.currentSignal=sig;var side=sig==="LONG"?"long":sig==="SHORT"?"short":null;
+    if(s.position){
+      var net=signalPositionPnl(s.position,price);
+      if(net>=cfg.profitUsd)signalClose(price,"цель чистой прибыли");
+      else if(net<=-cfg.stopLossUsd)signalClose(price,"стоп позиции");
+      else if(side&&side!==s.position.side)signalClose(price,"обратный сигнал");
+    }
+    if(!s.position&&side&&side!==s.lastSignal)signalOpen(side,price,ts);
+    s.lastSignal=side||"WAIT";
+    var eq=s.startBalance+s.realized+(s.position?signalPositionPnl(s.position,price):0);
+    if(eq>s.peakEquity)s.peakEquity=eq;
+    var dd=s.peakEquity?(s.peakEquity-eq)/s.peakEquity*100:0;if(dd>s.maxDrawdown)s.maxDrawdown=dd;
+  }
   function minuteNetPnl(){
     if(!Number.isFinite(state.minuteStartEquity))return 0;
     return currentEquity()-state.minuteStartEquity;
@@ -414,7 +466,8 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         addEvent("Сетка обновлена","LONG / SHORT",price,cfg.levels*2,null,"Обновлена вокруг текущей цены",ts);
       }
     }
-    if(Date.now()-(state.lastSavedAt||0)>=1000){state.lastSavedAt=Date.now();saveSession();}
+    if(running&&!state.halted&&cfg)processSignalPaper(price,ts);
+     if(Date.now()-(state.lastSavedAt||0)>=1000){state.lastSavedAt=Date.now();saveSession();}
     var now=Date.now();
     if(now-uiTimer>200){uiTimer=now;render();}
   }
@@ -498,7 +551,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     stopPaper(false);
     var balance=Number($("balanceInput").value);
     if(!Number.isFinite(balance)||balance<=0){alert("Укажи положительный виртуальный баланс.");return;}
-    cfg=null;state=blankState(balance);orderId=0;
+    cfg=null;state=blankState(balance);signalSim=blankSignalSim(balance);orderId=0;
     lockInputs(false);
     $("startButton").disabled=false;$("stopButton").disabled=true;
     setStatus("Не запущен","");
@@ -542,7 +595,19 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("feedLag").textContent=state.lastTickAt?"Тиков получено: "+state.tickCount+" · задержка данных "+Math.max(0,Date.now()-state.lastTradeTime)+" мс":"Ожидание котировки";
     $("lastTick").textContent=state.lastTickAt?"Последний тик: "+timeText(state.lastTickAt):"Последний тик: —";
     $("eventCount").textContent=state.events.length+" событий";
-    renderPendingOrders(price);renderJournal();drawChart();
+    renderPendingOrders(price);renderJournal();renderSignalComparison(price,totalPnl);drawChart();
+  }
+  function renderSignalComparison(price,gridPnl){
+    if(!signalSim)return;
+    var s=signalSim,pnl=s.realized+(s.position&&price?signalPositionPnl(s.position,price):0),el=$("compareSignal");
+    el.textContent=s.currentSignal;el.className="value "+(s.currentSignal==="LONG"?"positive":s.currentSignal==="SHORT"?"negative":"");
+    $("compareWarmup").textContent=s.history.length<25?"Накопление данных · примерно "+Math.max(0,30-s.history.length)+" секунд":"Средняя за 10с сравнивается со средней за 30с";
+    $("compareGridPnl").textContent=money(gridPnl);$("compareGridPnl").className="value "+(gridPnl>=0?"positive":"negative");
+    $("compareSignalPnl").textContent=money(pnl);$("compareSignalPnl").className="value "+(pnl>=0?"positive":"negative");
+    $("compareSignalAction").textContent=s.lastAction;$("compareSignalTrades").textContent=String(s.closedTrades);
+    $("compareSignalWins").textContent="Плюсовых: "+s.wins+" · минусовых: "+s.losses;
+    $("compareSignalDd").textContent=s.maxDrawdown.toFixed(2)+"%";
+    $("compareSignalPosition").textContent=s.position?"Открыта "+sideNames[s.position.side]+" · вход "+priceText(s.position.entryPrice):"Позиция не открыта";
   }
   function renderPendingOrders(price){
     var rows=[];
@@ -589,8 +654,10 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   $("exportButton").addEventListener("click",exportSession);
   $("exportJournalButton").addEventListener("click",exportJournal);
   $("resetButton").addEventListener("click",function(){resetPaper();});
+  $("resetCompareButton").addEventListener("click",function(){if(running){alert("Сначала останови PAPER, затем сбрось сравнение.");return;}signalSim=blankSignalSim(state.startBalance);saveSession();render();});
   window.addEventListener("resize",function(){drawChart();});
   state=blankState(Number($("balanceInput").value)||10000);
+  signalSim=blankSignalSim(Number($("balanceInput").value)||10000);
   try{
     var savedEvents=JSON.parse(localStorage.getItem(LOG_KEY)||"[]");
     if(Array.isArray(savedEvents))state.events=savedEvents.filter(function(e){return e&&Number.isFinite(e.time)&&typeof e.type==="string";}).slice(0,5000);
