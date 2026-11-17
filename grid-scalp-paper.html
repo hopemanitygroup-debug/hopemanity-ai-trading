@@ -51,13 +51,13 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </div>
 </header>
 <main>
-  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Одновременно допускается максимум 40 открытых позиций: до 20 LONG и до 20 SHORT. Каждая позиция закрывается при чистой прибыли от <span id="profitNotice">$0,01</span>. При убытке корзины <span id="stopNotice">$10,00</span> срабатывает стоп. Цель минуты — <span id="minuteTargetNotice">$1,00</span> по equity после расходов; при достижении новые входы ждут следующей минуты. Реальные ордера не отправляются.</div>
+  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Одновременно допускается максимум 80 открытых позиций: до 40 LONG и до 40 SHORT. Каждая позиция закрывается при чистой прибыли от <span id="profitNotice">$0,01</span>. При убытке корзины <span id="stopNotice">$10,00</span> срабатывает стоп. Цель минуты — <span id="minuteTargetNotice">$1,00</span> по equity после расходов; при достижении новые входы ждут следующей минуты. Реальные ордера не отправляются.</div>
 
   <section class="metrics">
     <div class="metric"><label>BTCUSDT</label><div class="value" id="price">—</div><small id="feedLag">Ожидание котировки</small></div>
     <div class="metric"><label>Виртуальная equity</label><div class="value" id="equity">—</div><small id="balanceLabel">Баланс PAPER</small></div>
     <div class="metric"><label>Чистый PAPER P&amp;L</label><div class="value" id="pnl">—</div><small>С учётом заданных комиссий и проскальзывания</small></div>
-    <div class="metric"><label>Открытые позиции</label><div class="value" id="openCount">0 / 40</div><small id="openExposure">Экспозиция $0</small></div>
+    <div class="metric"><label>Открытые позиции</label><div class="value" id="openCount">0 / 80</div><small id="openExposure">Экспозиция $0</small></div>
     <div class="metric"><label>P&amp;L за минуту (изменение equity)</label><div class="value" id="minutePnl">—</div><small id="minuteState">Минутный отчёт не закрывает позиции</small></div>
     <div class="metric"><label>Ожидающие уровни</label><div class="value" id="pendingCount">0</div><small id="pendingDetail">Buy 0 · Sell 0</small></div>
     <div class="metric"><label>Позиций закрыто за минуту</label><div class="value" id="closedPerMinute">0</div><small id="basketsPerMinute">Закрыто позиций: 0</small></div>
@@ -142,7 +142,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
   var cfg=null, state=null, botLeague=null, leagueNeedsReset=false, orderId=0, uiTimer=0;
   var sideNames={long:"LONG",short:"SHORT"};
-  var MAX_OPEN_PER_SIDE=20, MAX_OPEN_TOTAL=40, STOP_REENTRY_COOLDOWN_MS=60000;
+  var MAX_OPEN_PER_SIDE=40, MAX_OPEN_TOTAL=80, STOP_REENTRY_COOLDOWN_MS=60000;
 
   function makeLeagueProfiles(balance){
     var bots=[],i,j;
@@ -314,7 +314,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   }
   function triggerLevel(s,price,level,ts){
     if(openPositionCount()>=MAX_OPEN_TOTAL || state.sides[s].positions.length>=MAX_OPEN_PER_SIDE){
-      addEvent("Пропуск уровня",sideNames[s],price,1,null,"Достигнут предел: 40 позиций всего, максимум 20 на сторону",ts);
+      addEvent("Пропуск уровня",sideNames[s],price,1,null,"Достигнут предел: 80 позиций всего, максимум 40 на сторону",ts);
       return false;
     }
     var fillBase=s==="long"?Math.max(price,level.price):Math.min(price,level.price);
@@ -595,7 +595,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     if(leagueNeedsReset){alert("Сохранена старая лига без обратных сигналов. Если хотите сохранить её результаты, сначала нажмите «Сохранить сессию JSON». Затем остановите PAPER и нажмите «Сбросить лигу», чтобы начать парное сравнение.");return;}
     if(state.halted){alert("Сессия остановлена по лимиту убытка. Сбрось симуляцию, чтобы начать заново.");return;}
     if(openPositionCount()>MAX_OPEN_TOTAL || state.sides.long.positions.length>MAX_OPEN_PER_SIDE || state.sides.short.positions.length>MAX_OPEN_PER_SIDE){
-      if(!confirm("В сохранённой сессии уже открыто больше нового лимита (40 всего, по 20 на сторону). Существующие виртуальные позиции останутся под управлением PAPER; новые входы не будут добавляться, пока число открытых позиций не опустится ниже лимита. Продолжить?"))return;
+      if(!confirm("В сохранённой сессии уже открыто больше нового лимита (80 всего, по 40 на сторону). Существующие виртуальные позиции останутся под управлением PAPER; новые входы не будут добавляться, пока число открытых позиций не опустится ниже лимита. Продолжить?"))return;
     }
     if(!state.initialized){state=blankState(cfg.startBalance);botLeague=blankBotLeague(cfg.startBalance);}
     else if(Math.abs(cfg.startBalance-state.startBalance)>0.001){alert("Баланс PAPER уже задан. Сбрось симуляцию, чтобы изменить его.");return;}
