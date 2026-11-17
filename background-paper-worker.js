@@ -311,7 +311,7 @@ export class PaperBot {
     const cfg = this.cfg;
     const open = this.openCount();
     return {
-      ok: true, running: s.running, connected: s.connected, feedError: s.feedError || "",
+      ok: true, initialized: s.initialized, running: s.running, connected: s.connected, feedError: s.feedError || "",
       price: s.lastPrice, tickCount: s.tickCount,
       equity: this.equity(), balance: s.startBalance + s.realized,
       pnl: s.realized + this.floating(), realized: s.realized, floating: this.floating(),
@@ -342,7 +342,8 @@ export default {
     const id = env.PAPER_BOT.idFromName(parts[1]);
     const stub = env.PAPER_BOT.get(id);
     const inner = "/" + parts.slice(2).join("/");
-    const response = await stub.fetch("https://paper.internal" + (inner === "/" ? "/state" : inner), request);
+    const forwarded = new Request("https://paper.internal" + (inner === "/" ? "/state" : inner) + url.search, request);
+    const response = await stub.fetch(forwarded);
     const headers = new Headers(response.headers);
     for (const [k,v] of Object.entries(cors(origin))) headers.set(k,v);
     headers.set("Cache-Control","no-store");
