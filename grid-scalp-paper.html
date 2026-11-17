@@ -51,13 +51,13 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </div>
 </header>
 <main>
-  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Одновременно допускается максимум 80 открытых позиций: до 40 LONG и до 40 SHORT. Каждая позиция закрывается при чистой прибыли от <span id="profitNotice">$0,01</span>. При убытке корзины <span id="stopNotice">$10,00</span> срабатывает стоп. Цель минуты — <span id="minuteTargetNotice">$1,00</span> по equity после расходов; при достижении новые входы ждут следующей минуты. Реальные ордера не отправляются.</div>
+  <div class="notice"><strong>Только PAPER.</strong> Виртуальная сетка из 20 Buy Stop и 20 Sell Stop перемещается к текущей цене раз в секунду. Одновременно допускается максимум 40 открытых позиций: до 20 LONG и до 20 SHORT. Каждая позиция закрывается при чистой прибыли от <span id="profitNotice">$0,01</span>. При убытке корзины <span id="stopNotice">$10,00</span> срабатывает стоп. Цель минуты — <span id="minuteTargetNotice">$1,00</span> по equity после расходов; при достижении новые входы ждут следующей минуты. Реальные ордера не отправляются.</div>
 
   <section class="metrics">
     <div class="metric"><label>BTCUSDT</label><div class="value" id="price">—</div><small id="feedLag">Ожидание котировки</small></div>
     <div class="metric"><label>Виртуальная equity</label><div class="value" id="equity">—</div><small id="balanceLabel">Баланс PAPER</small></div>
     <div class="metric"><label>Чистый PAPER P&amp;L</label><div class="value" id="pnl">—</div><small>С учётом заданных комиссий и проскальзывания</small></div>
-    <div class="metric"><label>Открытые позиции</label><div class="value" id="openCount">0 / 80</div><small id="openExposure">Экспозиция $0</small></div>
+    <div class="metric"><label>Открытые позиции</label><div class="value" id="openCount">0 / 40</div><small id="openExposure">Экспозиция $0</small></div>
     <div class="metric"><label>P&amp;L за минуту (изменение equity)</label><div class="value" id="minutePnl">—</div><small id="minuteState">Минутный отчёт не закрывает позиции</small></div>
     <div class="metric"><label>Ожидающие уровни</label><div class="value" id="pendingCount">0</div><small id="pendingDetail">Buy 0 · Sell 0</small></div>
     <div class="metric"><label>Позиций закрыто за минуту</label><div class="value" id="closedPerMinute">0</div><small id="basketsPerMinute">Закрыто позиций: 0</small></div>
@@ -149,7 +149,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
   var cfg=null, state=null, signalSim=null, botLeague=null, leagueNeedsReset=false, orderId=0, uiTimer=0;
   var sideNames={long:"LONG",short:"SHORT"};
-  var MAX_OPEN_PER_SIDE=40, MAX_OPEN_TOTAL=80, STOP_REENTRY_COOLDOWN_MS=60000;
+  var MAX_OPEN_PER_SIDE=20, MAX_OPEN_TOTAL=40, STOP_REENTRY_COOLDOWN_MS=60000;
 
   function blankSignalSim(balance){return {startBalance:balance,realized:0,position:null,history:[],closedTrades:0,wins:0,losses:0,peakEquity:balance,maxDrawdown:0,lastSignal:"WAIT",currentSignal:"WAIT",lastAction:"Пока без сделок",lastSampleAt:0};}
   function makeLeagueProfiles(balance){
@@ -262,6 +262,16 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         e.pnl==null?"":Number(e.pnl).toFixed(2),e.reason
       ].map(cell).join(";"));
     });
+    if(botLeague&&Array.isArray(botLeague.bots)){
+      var exportTime=new Date().toISOString(),mark=state.lastPrice||0;
+      botLeague.bots.forEach(function(bot){
+        (bot.trades||[]).forEach(function(t){
+          lines.push([new Date(t.time).toISOString(),"PAPER-бот · сделка",bot.id+" · "+bot.variant+" · "+(t.side==="long"?"LONG":"SHORT"),Number(t.exitPrice).toFixed(2),1,Number(t.netPnl).toFixed(2),"Вход "+Number(t.entryPrice).toFixed(2)+" · "+t.reason+" · комиссия/проскальзывание учтены"].map(cell).join(";"));
+        });
+        var net=leagueBotPnl(bot,mark),floating=net-bot.realized,position=bot.position?(bot.position.side==="long"?"LONG":"SHORT")+" "+money(bot.position.notional):"нет";
+        lines.push([exportTime,"PAPER-бот · итог",bot.id+" · "+bot.variant,mark?mark.toFixed(2):"",bot.closedTrades,net.toFixed(2),bot.family+" · закрытый P&L "+bot.realized.toFixed(2)+" · открытый P&L "+floating.toFixed(2)+" · плюс/минус "+bot.wins+"/"+bot.losses+" · просадка "+bot.maxDrawdown.toFixed(2)+"% · позиция "+position+" · "+(bot.enabled?"активен":"отключён")].map(cell).join(";"));
+      });
+    }
     var blob=new Blob(["\uFEFF"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
     var url=URL.createObjectURL(blob),link=document.createElement("a");
     link.href=url;link.download="HopeManity-PAPER-journal-"+new Date().toISOString().replace(/[:.]/g,"-")+".csv";
@@ -314,7 +324,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   }
   function triggerLevel(s,price,level,ts){
     if(openPositionCount()>=MAX_OPEN_TOTAL || state.sides[s].positions.length>=MAX_OPEN_PER_SIDE){
-      addEvent("Пропуск уровня",sideNames[s],price,1,null,"Достигнут предел: 80 позиций всего, максимум 40 на сторону",ts);
+      addEvent("Пропуск уровня",sideNames[s],price,1,null,"Достигнут предел: 40 позиций всего, максимум 20 на сторону",ts);
       return false;
     }
     var fillBase=s==="long"?Math.max(price,level.price):Math.min(price,level.price);
@@ -430,8 +440,9 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     return gross-p.entryFee-p.qty*exit*cfg.feeRate;
   }
   function leagueBotPnl(bot,price){return bot.realized+(bot.position&&price?leaguePositionPnl(bot.position,price):0);}
-  function closeLeaguePosition(bot,price,reason){
+  function closeLeaguePosition(bot,price,reason,ts){
     var p=bot.position,n=leaguePositionPnl(p,price);bot.realized+=n;bot.closedTrades++;if(n>0)bot.wins++;else bot.losses++;
+    bot.trades=bot.trades||[];bot.trades.push({time:ts||Date.now(),openedAt:p.openedAt,side:p.side,entryPrice:p.entryPrice,exitPrice:price,netPnl:n,reason:reason});if(bot.trades.length>500)bot.trades.shift();
     bot.lastAction="Закрыта "+(p.side==="long"?"LONG":"SHORT")+" · "+money(n)+" · "+reason;bot.position=null;
   }
   function openLeaguePosition(bot,side,price,ts){
@@ -447,9 +458,9 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     league.bots.forEach(function(bot){
       var rawSignal=leagueSignal(bot,price,ts,league.history),sig=bot.inverted?(rawSignal==="LONG"?"SHORT":rawSignal==="SHORT"?"LONG":"WAIT"):rawSignal,side=sig==="LONG"?"long":sig==="SHORT"?"short":null;
       if(bot.position){var net=leaguePositionPnl(bot.position,price);
-        if(net>=cfg.profitUsd)closeLeaguePosition(bot,price,"цель чистой прибыли");
-        else if(net<=-Math.min(cfg.stopLossUsd,bot.allocation*cfg.sessionLossPct/100))closeLeaguePosition(bot,price,"аварийный стоп позиции");
-        else if(side&&side!==bot.position.side&&net>0)closeLeaguePosition(bot,price,"смена сигнала с прибылью");
+        if(net>=cfg.profitUsd)closeLeaguePosition(bot,price,"цель чистой прибыли",ts);
+        else if(net<=-Math.min(cfg.stopLossUsd,bot.allocation*cfg.sessionLossPct/100))closeLeaguePosition(bot,price,"аварийный стоп позиции",ts);
+        else if(side&&side!==bot.position.side&&net>0)closeLeaguePosition(bot,price,"смена сигнала с прибылью",ts);
       }
       if(!bot.position&&bot.enabled&&side&&sig!==bot.lastSignal)openLeaguePosition(bot,side,price,ts);
       if(bot.enabled&&!bot.position&&bot.realized<=-bot.allocation*cfg.sessionLossPct/100){bot.enabled=false;bot.lastAction="Остановлен по лимиту убытка PAPER";}
@@ -631,8 +642,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     if(leagueNeedsReset){alert("Сохранена старая лига без обратных сигналов. Если хотите сохранить её результаты, сначала нажмите «Сохранить сессию JSON». Затем остановите PAPER и нажмите «Сбросить лигу», чтобы начать парное сравнение.");return;}
     if(state.halted){alert("Сессия остановлена по лимиту убытка. Сбрось симуляцию, чтобы начать заново.");return;}
     if(openPositionCount()>MAX_OPEN_TOTAL || state.sides.long.positions.length>MAX_OPEN_PER_SIDE || state.sides.short.positions.length>MAX_OPEN_PER_SIDE){
-      alert("В сохранённой сессии уже больше лимита: максимум 80 открытых позиций, по 40 LONG и SHORT. Сначала сохрани журнал, затем закрой виртуальную корзину или сбрось симуляцию.");
-      return;
+      if(!confirm("В сохранённой сессии уже открыто больше нового лимита (40 всего, по 20 на сторону). Существующие виртуальные позиции останутся под управлением PAPER; новые входы не будут добавляться, пока число открытых позиций не опустится ниже лимита. Продолжить?"))return;
     }
     if(!state.initialized){state=blankState(cfg.startBalance);signalSim=blankSignalSim(cfg.startBalance);botLeague=blankBotLeague(cfg.startBalance);}
     else if(Math.abs(cfg.startBalance-state.startBalance)>0.001){alert("Баланс PAPER уже задан. Сбрось симуляцию, чтобы изменить его.");return;}
