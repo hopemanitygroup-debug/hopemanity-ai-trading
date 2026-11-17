@@ -63,17 +63,6 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     <div class="metric"><label>Позиций закрыто за минуту</label><div class="value" id="closedPerMinute">0</div><small id="basketsPerMinute">Закрыто позиций: 0</small></div>
   </section>
 
-  <section class="card" id="leagueCard">
-    <div class="row"><h2>Лига 60 PAPER-ботов</h2><div class="actions"><button id="keep20Button">Оставить до 20 прибыльных</button><button id="resetLeagueButton">Сбросить лигу</button></div></div>
-    <p class="muted">60 независимых симуляторов на одном потоке BTC: 10 парных наборов для тренда, импульса и возврата к средней; в каждой паре один бот торгует по сигналу, второй — в обратную сторону. У каждого отдельный виртуальный баланс (1/60 общего), позиция, журнал сделок и просадка. Размер сделки ограничен настройкой суммы позиции и долей баланса бота. Комиссия и проскальзывание учитываются. При лимите потерь бота новые входы для него отключаются. Это эксперимент, доходность не гарантируется; реальные ордера не отправляются.</p>
-    <div class="metrics">
-      <div class="metric"><label>Ботов в PAPER-лиге</label><div class="value" id="leagueCount">60</div><small>20 тренд · 20 импульс · 20 возврат</small></div>
-      <div class="metric"><label>Боты с плюсом после расходов</label><div class="value" id="leagueProfitable">0 / 60</div><small id="leagueProfitNote">Учитывается текущий P&amp;L открытых сделок</small></div>
-      <div class="metric"><label>Лидер лиги</label><div class="value" id="leagueLeader">—</div><small id="leagueLeaderPnl">Ожидание сигналов</small></div>
-      <div class="metric"><label>Топ-20 в плюсе</label><div class="value" id="leagueTop20">0 / 20</div><small>Считается по чистому P&amp;L</small></div>
-    </div>
-    <div class="scroll"><table><thead><tr><th>Место</th><th>Бот</th><th>Стратегия / параметры</th><th>Сигнал</th><th>Сделки</th><th>Плюс / минус</th><th>Чистый P&amp;L</th><th>Просадка</th><th>Позиция</th></tr></thead><tbody id="leagueTable"><tr><td colspan="9" class="empty">Лига готова к запуску PAPER.</td></tr></tbody></table></div>
-  </section>
 
   <section class="card">
     <div class="row"><h2>Поток цены</h2><span class="pill" id="effectiveStep">Шаг сетки: —</span></div>
@@ -140,25 +129,11 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   var LOG_KEY = "hopemanity_csv_stop_grid_events_v8";
   var SESSION_KEY = "hopemanity_csv_stop_grid_session_v8";
   var running=false, connected=false, socket=null, reconnectTimer=null, reconnectDelay=1000;
-  var cfg=null, state=null, botLeague=null, leagueNeedsReset=false, orderId=0, uiTimer=0;
+  var cfg=null, state=null, orderId=0, uiTimer=0;
   var sideNames={long:"LONG",short:"SHORT"};
   var MAX_OPEN_PER_SIDE=40, MAX_OPEN_TOTAL=80, STOP_REENTRY_COOLDOWN_MS=60000;
 
-  function makeLeagueProfiles(balance){
-    var bots=[],i,j;
-    for(i=0;i<20;i++)bots.push({id:"T"+String(i+1).padStart(2,"0"),family:"Тренд",fastSec:5+(i%5)*4,slowSec:30+Math.floor(i/5)*20,threshold:0.00005+(i%4)*0.00005});
-    for(i=0;i<20;i++)bots.push({id:"M"+String(i+1).padStart(2,"0"),family:"Импульс",lookbackSec:5+(i%5)*5,threshold:0.0001+Math.floor(i/5)*0.0001});
-    for(i=0;i<20;i++)bots.push({id:"R"+String(i+1).padStart(2,"0"),family:"Возврат",lookbackSec:20+(i%5)*10,threshold:0.0001+Math.floor(i/5)*0.0001});
-    var paired=[];
-    bots.forEach(function(base){
-      if(Number(base.id.slice(1))>10)return;
-      [false,true].forEach(function(inverted){
-        var b=Object.assign({},base);b.baseId=base.id;b.inverted=inverted;b.variant=inverted?"Против сигнала":"По сигналу";b.id=base.id+(inverted?"-INV":"-STD");paired.push(b);
-      });
-    });
-    return paired.map(function(b){b.allocation=balance/60;b.enabled=true;b.realized=0;b.position=null;b.lastSignal="WAIT";b.closedTrades=0;b.wins=0;b.losses=0;b.peakEquity=b.allocation;b.maxDrawdown=0;b.lastAction="Ожидание данных";return b;});
-  }
-  function blankBotLeague(balance){return {pairedDirections:true,startBalance:balance,bots:makeLeagueProfiles(balance),history:[],lastSampleAt:0,startedAt:0};}
+
   function blankState(balance){
     return {
       startBalance:balance,realized:0,peakEquity:balance,maxDrawdown:0,lastPrice:0,lastTradeTime:0,lastTickAt:0,
@@ -203,7 +178,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function saveSession(){
     if(!state)return;
     try{
-      localStorage.setItem(SESSION_KEY,JSON.stringify({version:2,savedAt:Date.now(),settings:settingsSnapshot(),cfg:cfg,orderId:orderId,state:state,botLeague:botLeague}));
+      localStorage.setItem(SESSION_KEY,JSON.stringify({version:2,savedAt:Date.now(),settings:settingsSnapshot(),cfg:cfg,orderId:orderId,state:state}));
       localStorage.setItem(LOG_KEY,JSON.stringify(state.events||[]));
     }catch(e){}
   }
@@ -216,8 +191,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         Object.keys(saved.settings).forEach(function(id){if($(id))$(id).value=saved.settings[id];});
       }
       state=saved.state;orderId=Number(saved.orderId)||0;
-      botLeague=saved.botLeague&&Array.isArray(saved.botLeague.bots)&&saved.botLeague.bots.length===60?saved.botLeague:blankBotLeague(state.startBalance);
-      leagueNeedsReset=!botLeague.pairedDirections;
+
       try{cfg=readConfig();}catch(e){cfg=saved.cfg||null;}
       lockInputs(state.initialized&&!state.halted);
       $("startButton").disabled=false;$("stopButton").disabled=true;
@@ -233,7 +207,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       autoTrading:false,
       settings:settingsSnapshot(),
       state:state,
-      botLeague:botLeague,
+
       orderId:orderId
     };
     var blob=new Blob([JSON.stringify(snapshot,null,2)],{type:"application/json"});
@@ -252,16 +226,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         e.pnl==null?"":Number(e.pnl).toFixed(2),e.reason
       ].map(cell).join(";"));
     });
-    if(botLeague&&Array.isArray(botLeague.bots)){
-      var exportTime=new Date().toISOString(),mark=state.lastPrice||0;
-      botLeague.bots.forEach(function(bot){
-        (bot.trades||[]).forEach(function(t){
-          lines.push([new Date(t.time).toISOString(),"PAPER-бот · сделка",bot.id+" · "+bot.variant+" · "+(t.side==="long"?"LONG":"SHORT"),Number(t.exitPrice).toFixed(2),1,Number(t.netPnl).toFixed(2),"Вход "+Number(t.entryPrice).toFixed(2)+" · "+t.reason+" · комиссия/проскальзывание учтены"].map(cell).join(";"));
-        });
-        var net=leagueBotPnl(bot,mark),floating=net-bot.realized,position=bot.position?(bot.position.side==="long"?"LONG":"SHORT")+" "+money(bot.position.notional):"нет";
-        lines.push([exportTime,"PAPER-бот · итог",bot.id+" · "+bot.variant,mark?mark.toFixed(2):"",bot.closedTrades,net.toFixed(2),bot.family+" · закрытый P&L "+bot.realized.toFixed(2)+" · открытый P&L "+floating.toFixed(2)+" · плюс/минус "+bot.wins+"/"+bot.losses+" · просадка "+bot.maxDrawdown.toFixed(2)+"% · позиция "+position+" · "+(bot.enabled?"активен":"отключён")].map(cell).join(";"));
-      });
-    }
+
     var blob=new Blob(["\uFEFF"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"});
     var url=URL.createObjectURL(blob),link=document.createElement("a");
     link.href=url;link.download="HopeManity-PAPER-journal-"+new Date().toISOString().replace(/[:.]/g,"-")+".csv";
@@ -375,70 +340,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       }
     });
   }
-  function leagueSignal(bot,price,ts,history){
-    var recent=history.filter(function(x){return ts-x.t<=(bot.family==="Тренд"?bot.slowSec*1000:bot.lookbackSec*1000);});
-    if(bot.family==="Тренд"){
-      var fast=history.filter(function(x){return ts-x.t<=bot.fastSec*1000;});
-      if(fast.length<Math.max(3,bot.fastSec/2)||recent.length<Math.max(10,bot.slowSec/2))return "WAIT";
-      var fm=fast.reduce(function(a,x){return a+x.p;},0)/fast.length,sm=recent.reduce(function(a,x){return a+x.p;},0)/recent.length,d=(fm-sm)/sm;
-      return d>bot.threshold?"LONG":d< -bot.threshold?"SHORT":"WAIT";
-    }
-    if(recent.length<Math.max(8,bot.lookbackSec/2))return "WAIT";
-    var avg=recent.reduce(function(a,x){return a+x.p;},0)/recent.length,delta=(price-avg)/avg;
-    if(bot.family==="Импульс")return delta>bot.threshold?"LONG":delta< -bot.threshold?"SHORT":"WAIT";
-    return delta< -bot.threshold?"LONG":delta>bot.threshold?"SHORT":"WAIT";
-  }
-  function leaguePositionPnl(p,price){
-    var exit=price*(p.side==="long"?1-cfg.slipRate:1+cfg.slipRate),gross=p.side==="long"?p.qty*(exit-p.entryPrice):p.qty*(p.entryPrice-exit);
-    return gross-p.entryFee-p.qty*exit*cfg.feeRate;
-  }
-  function leagueBotPnl(bot,price){return bot.realized+(bot.position&&price?leaguePositionPnl(bot.position,price):0);}
-  function closeLeaguePosition(bot,price,reason,ts){
-    var p=bot.position,n=leaguePositionPnl(p,price);bot.realized+=n;bot.closedTrades++;if(n>0)bot.wins++;else bot.losses++;
-    bot.trades=bot.trades||[];bot.trades.push({time:ts||Date.now(),openedAt:p.openedAt,side:p.side,entryPrice:p.entryPrice,exitPrice:price,netPnl:n,reason:reason});if(bot.trades.length>500)bot.trades.shift();
-    bot.lastAction="Закрыта "+(p.side==="long"?"LONG":"SHORT")+" · "+money(n)+" · "+reason;bot.position=null;
-  }
-  function openLeaguePosition(bot,side,price,ts){
-    var notional=Math.min(cfg.positionUsd,bot.allocation),fill=price*(side==="long"?1+cfg.slipRate:1-cfg.slipRate),qty=notional/fill;
-    bot.position={side:side,qty:qty,entryPrice:fill,entryFee:notional*cfg.feeRate,openedAt:ts,notional:notional};
-    bot.lastAction="Открыта "+(side==="long"?"LONG":"SHORT")+" · "+money(notional);
-  }
-  function processBotLeague(price,ts){
-    var league=botLeague;if(!league||!cfg)return;
-    if(ts-(league.lastSampleAt||0)>=1000){league.history.push({t:ts,p:price});league.lastSampleAt=ts;}
-    while(league.history.length&&ts-league.history[0].t>180000)league.history.shift();
-    if(!league.startedAt)league.startedAt=ts;
-    league.bots.forEach(function(bot){
-      var rawSignal=leagueSignal(bot,price,ts,league.history),sig=bot.inverted?(rawSignal==="LONG"?"SHORT":rawSignal==="SHORT"?"LONG":"WAIT"):rawSignal,side=sig==="LONG"?"long":sig==="SHORT"?"short":null;
-      if(bot.position){var net=leaguePositionPnl(bot.position,price);
-        if(net>=cfg.profitUsd)closeLeaguePosition(bot,price,"цель чистой прибыли",ts);
-        else if(net<=-Math.min(cfg.stopLossUsd,bot.allocation*cfg.sessionLossPct/100))closeLeaguePosition(bot,price,"аварийный стоп позиции",ts);
-        else if(side&&side!==bot.position.side&&net>0)closeLeaguePosition(bot,price,"смена сигнала с прибылью",ts);
-      }
-      if(!bot.position&&bot.enabled&&side&&sig!==bot.lastSignal)openLeaguePosition(bot,side,price,ts);
-      if(bot.enabled&&!bot.position&&bot.realized<=-bot.allocation*cfg.sessionLossPct/100){bot.enabled=false;bot.lastAction="Остановлен по лимиту убытка PAPER";}
-      bot.lastSignal=sig;
-      var equity=bot.allocation+leagueBotPnl(bot,price);if(equity>bot.peakEquity)bot.peakEquity=equity;
-      var dd=bot.peakEquity>0?(bot.peakEquity-equity)/bot.peakEquity*100:0;if(dd>bot.maxDrawdown)bot.maxDrawdown=dd;
-    });
-  }
-  function renderBotLeague(price){
-    if(!botLeague)return;
-    var rows=botLeague.bots.map(function(b){return {bot:b,pnl:leagueBotPnl(b,price)};}).sort(function(a,b){return b.pnl-a.pnl;});
-    var profitable=rows.filter(function(x){return x.pnl>0;}).length,top=rows.slice(0,20).filter(function(x){return x.pnl>0;}).length,leader=rows[0];
-    $("leagueCount").textContent=String(rows.length);
-    $("leagueProfitable").textContent=profitable+" / 60";
-    $("leagueProfitable").className="value "+(profitable>=20?"positive":profitable?"":"negative");
-    $("leagueLeader").textContent=leader?leader.bot.id:"—";
-    $("leagueLeaderPnl").textContent=leader?money(leader.pnl)+" · "+leader.bot.family+" · "+leader.bot.variant:"—";
-    $("leagueTop20").textContent=top+" / 20";
-    $("leagueTop20").className="value "+(top===20?"positive":top?"":"negative");
-    $("leagueProfitNote").textContent=leagueNeedsReset?"Старая лига: экспортируйте JSON при необходимости и нажмите «Сбросить лигу»":botLeague.startedAt?"Запущено "+new Date(botLeague.startedAt).toLocaleString("ru-RU")+" · плюс считается после расходов":"Запустите PAPER, чтобы начать сбор статистики";
-    $("leagueTable").innerHTML=rows.map(function(x,i){var b=x.bot,raw=leagueSignal(b,price||0,Date.now(),botLeague.history),sig=b.inverted?(raw==="LONG"?"SHORT":raw==="SHORT"?"LONG":"WAIT"):raw;
-      var params=b.family==="Тренд"?"быстр. "+b.fastSec+"с / медл. "+b.slowSec+"с / порог "+(b.threshold*100).toFixed(3)+"%":"окно "+b.lookbackSec+"с / порог "+(b.threshold*100).toFixed(3)+"%";
-      return "<tr><td>"+(i+1)+"</td><td>"+b.id+(b.enabled?"":" · OFF")+"</td><td>"+b.family+" · "+b.variant+" · "+params+"</td><td>"+(b.inverted&&raw!=="WAIT"?raw+" → "+sig:sig)+"</td><td>"+b.closedTrades+"</td><td>"+b.wins+" / "+b.losses+"</td><td class=\""+(x.pnl>=0?"positive":"negative")+"\">"+money(x.pnl)+"</td><td>"+b.maxDrawdown.toFixed(2)+"%</td><td>"+(b.position?(b.position.side==="long"?"LONG":"SHORT")+" · "+money(b.position.notional):"—")+"</td></tr>";
-    }).join("");
-  }
+
   function minuteNetPnl(){
     if(!Number.isFinite(state.minuteStartEquity))return 0;
     return currentEquity()-state.minuteStartEquity;
@@ -523,7 +425,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
         addEvent("Сетка обновлена","LONG / SHORT",price,cfg.levels*2,null,"Обновлена вокруг текущей цены",ts);
       }
     }
-    if(running&&!state.halted&&cfg)processBotLeague(price,ts);
+
      if(!Number.isFinite(state.peakEquity))state.peakEquity=state.startBalance;
      var gridEq=currentEquity();if(gridEq>state.peakEquity)state.peakEquity=gridEq;
      var gridDd=state.peakEquity>0?(state.peakEquity-gridEq)/state.peakEquity*100:0;
@@ -592,12 +494,12 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function startPaper(){
     if(running)return;
     try{cfg=readConfig();}catch(e){alert(e.message);return;}
-    if(leagueNeedsReset){alert("Сохранена старая лига без обратных сигналов. Если хотите сохранить её результаты, сначала нажмите «Сохранить сессию JSON». Затем остановите PAPER и нажмите «Сбросить лигу», чтобы начать парное сравнение.");return;}
+
     if(state.halted){alert("Сессия остановлена по лимиту убытка. Сбрось симуляцию, чтобы начать заново.");return;}
     if(openPositionCount()>MAX_OPEN_TOTAL || state.sides.long.positions.length>MAX_OPEN_PER_SIDE || state.sides.short.positions.length>MAX_OPEN_PER_SIDE){
       if(!confirm("В сохранённой сессии уже открыто больше нового лимита (80 всего, по 40 на сторону). Существующие виртуальные позиции останутся под управлением PAPER; новые входы не будут добавляться, пока число открытых позиций не опустится ниже лимита. Продолжить?"))return;
     }
-    if(!state.initialized){state=blankState(cfg.startBalance);botLeague=blankBotLeague(cfg.startBalance);}
+    if(!state.initialized){state=blankState(cfg.startBalance);}
     else if(Math.abs(cfg.startBalance-state.startBalance)>0.001){alert("Баланс PAPER уже задан. Сбрось симуляцию, чтобы изменить его.");return;}
     running=true;reconnectDelay=1000;lockInputs(true);
     $("startButton").disabled=true;$("stopButton").disabled=false;
@@ -612,7 +514,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     stopPaper(false);
     var balance=Number($("balanceInput").value);
     if(!Number.isFinite(balance)||balance<=0){alert("Укажи положительный виртуальный баланс.");return;}
-    cfg=null;state=blankState(balance);botLeague=blankBotLeague(balance);leagueNeedsReset=false;orderId=0;
+    cfg=null;state=blankState(balance);orderId=0;
     lockInputs(false);
     $("startButton").disabled=false;$("stopButton").disabled=true;
     setStatus("Не запущен","");
@@ -656,7 +558,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("feedLag").textContent=state.lastTickAt?"Тиков получено: "+state.tickCount+" · задержка данных "+Math.max(0,Date.now()-state.lastTradeTime)+" мс":"Ожидание котировки";
     $("lastTick").textContent=state.lastTickAt?"Последний тик: "+timeText(state.lastTickAt):"Последний тик: —";
     $("eventCount").textContent=state.events.length+" событий";
-    renderOpenPositions(price);renderPendingOrders(price);renderJournal();renderBotLeague(price);drawChart();
+    renderOpenPositions(price);renderPendingOrders(price);renderJournal();drawChart();
   }
   function renderOpenPositions(price){
     var rows=[];
@@ -722,19 +624,10 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   $("exportButton").addEventListener("click",exportSession);
   $("exportJournalButton").addEventListener("click",exportJournal);
   $("resetButton").addEventListener("click",function(){resetPaper();});
-  $("keep20Button").addEventListener("click",function(){
-    if(running){alert("Сначала останови PAPER, затем выбери прибыльных ботов.");return;}
-    if(leagueNeedsReset){alert("Сначала сбрось старую лигу, чтобы включить парное сравнение.");return;}
-    var ranked=botLeague.bots.map(function(b){return {bot:b,pnl:leagueBotPnl(b,state.lastPrice)};}).filter(function(x){return x.pnl>0;}).sort(function(a,b){return b.pnl-a.pnl;});
-    var selected=ranked.slice(0,20).map(function(x){return x.bot.id;});
-    botLeague.bots.forEach(function(b){b.enabled=selected.indexOf(b.id)>=0;});
-    saveSession();render();
-    alert(selected.length?"Оставлено новых входов у "+selected.length+" прибыльных ботов. Остальные больше не открывают позиции; их уже открытые виртуальные позиции продолжают управляться по правилам PAPER.":"Пока нет ботов с положительным чистым P&L. Никого не отключал.");
-  });
-  $("resetLeagueButton").addEventListener("click",function(){if(running){alert("Сначала останови PAPER, затем сбрось лигу.");return;}botLeague=blankBotLeague(state.startBalance);leagueNeedsReset=false;saveSession();render();});
+
   window.addEventListener("resize",function(){drawChart();});
   state=blankState(Number($("balanceInput").value)||10000);
-  botLeague=blankBotLeague(Number($("balanceInput").value)||10000);
+
   try{
     var savedEvents=JSON.parse(localStorage.getItem(LOG_KEY)||"[]");
     if(Array.isArray(savedEvents))state.events=savedEvents.filter(function(e){return e&&Number.isFinite(e.time)&&typeof e.type==="string";}).slice(0,5000);
