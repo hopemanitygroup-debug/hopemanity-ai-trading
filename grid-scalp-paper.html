@@ -58,7 +58,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     <div class="metric"><label>Виртуальная equity</label><div class="value" id="equity">—</div><small id="balanceLabel">Баланс PAPER</small></div>
     <div class="metric"><label>Чистый PAPER P&amp;L</label><div class="value" id="pnl">—</div><small>С учётом заданных комиссий и проскальзывания</small></div>
     <div class="metric"><label>Открытые позиции</label><div class="value" id="openCount">0 / 80</div><small id="openExposure">Экспозиция $0</small></div>
-    <div class="metric"><label>Чистый P&amp;L этой минуты</label><div class="value" id="minutePnl">—</div><small id="minuteState">Цель минуты $1,00</small></div>
+    <div class="metric"><label>P&amp;L за минуту (изменение equity)</label><div class="value" id="minutePnl">—</div><small id="minuteState">Минутный отчёт не закрывает позиции</small></div>
     <div class="metric"><label>Ожидающие уровни</label><div class="value" id="pendingCount">0</div><small id="pendingDetail">Buy 0 · Sell 0</small></div>
     <div class="metric"><label>Позиций закрыто за минуту</label><div class="value" id="closedPerMinute">0</div><small id="basketsPerMinute">Закрыто позиций: 0</small></div>
   </section>
@@ -397,7 +397,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     if(bucket<=state.minuteWindowStart)return;
     var previousPnl=minuteNetPnl(),wasPaused=state.minuteGoalHit;
     state.lastMinutePnl=previousPnl;
-    addEvent("Итог минуты","—",price,0,previousPnl,wasPaused?"Цель минуты достигнута":"Цель минуты не достигнута",ts);
+    addEvent("Итог минуты","—",price,0,previousPnl,wasPaused?"Цель достигнута; открытые позиции оставлены":"Цель не достигнута; минутный итог — только отчёт, позиции оставлены",ts);
     state.minuteWindowStart=bucket;
     state.minuteStartEquity=currentEquity();
     state.minuteGoalHit=false;
@@ -589,7 +589,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     var minutePnlValue=Number.isFinite(state.minuteStartEquity)?minuteNetPnl():0;
     $("minutePnl").textContent=Number.isFinite(state.minuteStartEquity)?money(minutePnlValue):"—";
     $("minutePnl").className="value "+(minutePnlValue>=0?"positive":"negative");
-    $("minuteState").textContent=state.minuteGoalHit?"Цель достигнута · входы на паузе":"Цель "+money(cfg?cfg.minuteTargetUsd:Number($("minuteTargetInput").value)||1);
+    $("minuteState").textContent=state.minuteGoalHit?"Цель достигнута · новые входы на паузе, позиции остаются":"Отчёт equity, позиции не закрываются по минуте";
     $("longPnl").textContent=price?money(basketPnl("long",price)):"—";
     $("shortPnl").textContent=price?money(basketPnl("short",price)):"—";
     $("longPnl").className=basketPnl("long",price)>=0?"positive":"negative";
