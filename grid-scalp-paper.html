@@ -108,6 +108,12 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   </section>
 
   <section class="card">
+    <div class="row"><h2>Закрытые позиции</h2><span class="muted" id="closedPositionTableCount">0 позиций</span></div>
+    <p class="muted">Последние закрытые виртуальные позиции с учётом заданной комиссии и проскальзывания.</p>
+    <div class="scroll"><table><thead><tr><th>Сторона</th><th>Вход</th><th>Выход</th><th>Сумма позиции</th><th>Объём BTC</th><th>Чистый P&amp;L</th><th>Закрыта</th></tr></thead><tbody id="closedPositionRows"><tr><td colspan="7" class="empty">Закрытых позиций пока нет.</td></tr></tbody></table></div>
+  </section>
+
+  <section class="card">
     <div class="row"><h2>Текущие отложенные уровни</h2><span class="muted" id="pendingTableCount">0 уровней</span></div>
     <div class="scroll"><table><thead><tr><th>Тип</th><th>Уровень</th><th>Цена ордера</th><th>Расстояние от BTC</th></tr></thead><tbody id="pendingOrders"><tr><td colspan="4" class="empty">Сетка появится после получения котировки.</td></tr></tbody></table></div>
   </section>
@@ -136,7 +142,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
   function blankState(balance){
     return {
       startBalance:balance,realized:0,peakEquity:balance,maxDrawdown:0,lastPrice:0,lastTradeTime:0,lastTickAt:0,
-      tickCount:0,events:[],prices:[],runStartedAt:null,runActiveMs:0,runLastStartedAt:null,
+      tickCount:0,events:[],prices:[],closedPositions:[],runStartedAt:null,runActiveMs:0,runLastStartedAt:null,
       sides:{long:{pending:[],positions:[],center:0},short:{pending:[],positions:[],center:0}},
       initialized:false,halted:false,haltReason:""
     };
@@ -190,6 +196,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       }
       state=saved.state;orderId=Number(saved.orderId)||0;
       state.runActiveMs=Number(state.runActiveMs)||0;
+      if(!Array.isArray(state.closedPositions))state.closedPositions=[];
       if(state.runLastStartedAt){state.runActiveMs+=Math.max(0,(Number(saved.savedAt)||Date.now())-Number(state.runLastStartedAt));state.runLastStartedAt=null;}
       if(!("runStartedAt" in state))state.runStartedAt=null;
 
@@ -312,6 +319,9 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     var net=markedPositionPnl(p,price);
     side.positions.splice(index,1);
     state.realized+=net;
+    if(!Array.isArray(state.closedPositions))state.closedPositions=[];
+    state.closedPositions.unshift({side:s,entryPrice:p.entryPrice,exitPrice:price,notional:p.notional||p.qty*p.entryPrice,qty:p.qty,pnl:net,closedAt:ts||Date.now(),openedAt:p.openedAt||0,reason:reason});
+    if(state.closedPositions.length>500)state.closedPositions.length=500;
     addEvent("Позиция закрыта",sideNames[s],price,1,net,reason,ts);
     return net;
   }
@@ -519,7 +529,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("feedLag").textContent=state.lastTickAt?"Тиков получено: "+state.tickCount+" · задержка данных "+Math.max(0,Date.now()-state.lastTradeTime)+" мс":"Ожидание котировки";
     $("lastTick").textContent=state.lastTickAt?"Последний тик: "+timeText(state.lastTickAt):"Последний тик: —";
     $("eventCount").textContent=state.events.length+" событий";
-    renderOpenPositions(price);renderPendingOrders(price);renderJournal();drawChart();
+    renderOpenPositions(price);renderClosedPositions();renderPendingOrders(price);renderJournal();drawChart();
   }
   function renderOpenPositions(price){
     var rows=[];
@@ -532,6 +542,15 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
     $("openPositionRows").innerHTML=rows.map(function(row){
       var p=row.p,net=price?markedPositionPnl(p,price):0,sideName=sideNames[row.side];
       return "<tr><td class=\""+(row.side==="long"?"positive":"negative")+"\">"+sideName+"</td><td>"+priceText(p.entryPrice)+"</td><td>"+money(p.notional||p.qty*p.entryPrice)+"</td><td>"+Number(p.qty).toFixed(6)+"</td><td class=\""+(net>=0?"positive":"negative")+"\">"+money(net)+"</td><td>"+timeText(p.openedAt||0)+"</td><td><button data-close-position=\""+row.side+"\" data-position-id=\""+p.id+"\">Закрыть</button></td></tr>";
+    }).join("");
+  }
+  function renderClosedPositions(){
+    var rows=Array.isArray(state.closedPositions)?state.closedPositions:[];
+    $("closedPositionTableCount").textContent=rows.length+" позиций";
+    if(!rows.length){$("closedPositionRows").innerHTML='<tr><td colspan="7" class="empty">Закрытых позиций пока нет.</td></tr>';return;}
+    $("closedPositionRows").innerHTML=rows.slice(0,100).map(function(p){
+      var pnl=Number(p.pnl)||0;
+      return "<tr><td class=\""+(p.side==="long"?"positive":"negative")+"\">"+(p.side==="long"?"LONG":"SHORT")+"</td><td>"+priceText(p.entryPrice)+"</td><td>"+priceText(p.exitPrice)+"</td><td>"+money(p.notional||0)+"</td><td>"+Number(p.qty||0).toFixed(6)+"</td><td class=\""+(pnl>=0?"positive":"negative")+"\">"+money(pnl)+"</td><td>"+timeText(p.closedAt||0)+"</td></tr>";
     }).join("");
   }
   function renderPendingOrders(price){
