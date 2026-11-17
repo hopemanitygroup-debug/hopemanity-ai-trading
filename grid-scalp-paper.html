@@ -536,7 +536,7 @@ footer{max-width:1240px;margin:auto;padding:12px 18px 28px;color:var(--muted);fo
       alert("В сохранённой сессии уже больше лимита: максимум 80 открытых позиций, по 40 LONG и SHORT. Сначала сохрани журнал, затем закрой виртуальную корзину или сбрось симуляцию.");
       return;
     }
-    if(!state.initialized)state=blankState(cfg.startBalance);
+    if(!state.initialized){state=blankState(cfg.startBalance);signalSim=blankSignalSim(cfg.startBalance);}
     else if(Math.abs(cfg.startBalance-state.startBalance)>0.001){alert("Баланс PAPER уже задан. Сбрось симуляцию, чтобы изменить его.");return;}
     running=true;reconnectDelay=1000;lockInputs(true);
     $("startButton").disabled=true;$("stopButton").disabled=false;
