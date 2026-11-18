@@ -8,7 +8,7 @@ function blankState(balance) {
   return {
     startBalance: balance, realized: 0, peakEquity: balance, maxDrawdown: 0,
     lastPrice: 0, lastTradeTime: 0, tickCount: 0, events: [], prices: [],
-    closedPositions: [], runActiveMs: 0, runLastStartedAt: null,
+    closedPositions: [], closedNotional: 0, closedVolumeBaseline: 0, draining: false, runActiveMs: 0, runLastStartedAt: null,
     sides: { long: { pending: [], positions: [], center: 0 }, short: { pending: [], positions: [], center: 0 } },
     initialized: false, running: false, halted: false, haltReason: "",
     reentryUntil: 0, lastGridRefreshAt: 0, lastSavedAt: 0, connected: false
@@ -50,7 +50,7 @@ export class PaperBot {
     if (this.state.closedNotional == null) this.state.closedNotional = (this.state.closedPositions || []).reduce((sum, p) => sum + (Number(p.notional) || 0), 0);
     if (this.state.closedVolumeBaseline == null) this.state.closedVolumeBaseline = this.state.closedNotional;
     if (this.state.draining == null) this.state.draining = false;
-    if (this.cfg && this.cfg.closedVolumeLimitUsd == null) this.cfg.closedVolumeLimitUsd = 0;
+    if (this.cfg && this.cfg.closedVolumeLimitUsd == null) this.cfg.closedVolumeLimitUsd = 2000;
     this.orderId = Number(await this.ctx.storage.get("orderId")) || 0;
     if (this.state.running) {
       this.state.connected = false;
