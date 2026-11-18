@@ -117,7 +117,7 @@ $("drawdown").textContent=(Number(s.maxDrawdown)||0).toFixed(2)+"%";$("ticks").t
 var profitGoal=Number(s.config&&s.config.profitGoalUsd)||0, profitProgress=Number(s.profitGoalProgress)||0;
 $("profitGoalProgress").textContent=money(profitProgress)+" / "+(profitGoal?money(profitGoal):"выкл.");
 $("profitGoalDetail").textContent=s.draining?(s.openCount?"Цель достигнута · ждём цели открытых позиций":"Цель достигнута · позиции закрыты"):profitGoal?"Считается чистый закрытый P&L с момента применения":"Цель выключена";
-$("startButton").disabled=s.running||s.halted||initialized;$("stopButton").disabled=!s.running;
+$("startButton").disabled=s.running||s.halted||Boolean(s.draining);$("startButton").textContent=initialized?"Возобновить PAPER":"Запустить серверный PAPER";$("stopButton").disabled=!s.running;
 $("flattenButton").disabled=!s.openCount;
 $("resetButton").disabled=s.running;
 $("applyClosedVolumeLimit").disabled=!initialized;
@@ -165,7 +165,7 @@ catch(e){setError(e.message);}
 $("stopButton").addEventListener("click",async function(){try{await call("/stop","POST",{});await poll();}catch(e){setError(e.message);}});
 $("applyClosedVolumeLimit").addEventListener("click",async function(){
 try{var goal=val("profitGoalInput");if(!Number.isFinite(goal)||goal<0)throw new Error("Укажите 0 или положительную цель в USDT.");
-await call("/profit-goal","POST",{goalUsd:goal});await poll();setError("Цель заработка применена. Отсчёт чистого P&L начинается с этого момента; открытые позиции сохранены.");}
+await call("/profit-goal","POST",{goalUsd:goal});await poll();setError(running?"Цель применена. Новые входы разрешены, открытые позиции сохранены.":"Цель применена. Нажмите «Возобновить PAPER», чтобы снова разрешить новые входы.");}
 catch(e){setError(e.message);}
 });
 $("flattenButton").addEventListener("click",async function(){if(!confirm("Закрыть все виртуальные позиции по текущей цене?"))return;try{await call("/flatten","POST",{});await poll();}catch(e){setError(e.message);}});
