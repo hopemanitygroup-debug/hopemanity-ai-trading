@@ -25,9 +25,9 @@ function cleanConfig(c) {
   };
   if (Object.values(out).some(x => !Number.isFinite(x)) || out.startBalance <= 0 ||
       out.positionUsd <= 0 || out.levels < 1 || out.levels > 50 || out.stepUsd <= 0 ||
-      out.feePercent < 0 || out.slippagePercent < 0 || out.profitGoalUsd < 0 || out.profitUsd < 10 || out.profitUsd > 100 ||
+      out.feePercent < 0 || out.slippagePercent < 0 || out.profitGoalUsd < 0 || out.profitUsd < 1 || out.profitUsd > 100 ||
       out.stopLossUsd <= 0 || out.sessionLossPct <= 0 || out.exposurePct <= 0 || out.exposurePct > 500) {
-    throw new Error("Проверь настройки PAPER: цель чистой прибыли должна быть от 10 до 100 USDT; остальные значения должны быть положительными.");
+    throw new Error("Проверь настройки PAPER: цель чистой прибыли должна быть от 1 до 100 USDT; остальные значения должны быть положительными.");
   }
   out.feeRate = out.feePercent / 100;
   out.slipRate = out.slippagePercent / 100;
@@ -89,6 +89,18 @@ export class PaperBot {
       await this.persist();
       this.ensureAlarm(5 * 60 * 1000);
       this.ctx.waitUntil(this.connectFeed());
+      return this.json(this.snapshot());
+    }
+    if (method === "POST" && url.pathname === "/position-profit") {
+      if (!this.cfg) return this.json({ error: "Сначала запустите или настройте PAPER-сессию." }, 409);
+      const body = await request.json().catch(() => ({}));
+      const target = Number(body.profitUsd);
+      if (!Number.isFinite(target) || target < 1 || target > 100)
+        return this.json({ error: "Укажите чистую прибыль позиции от 1 до 100 USDT." }, 400);
+      this.cfg.profitUsd = target;
+      this.addEvent("Цель позиции изменена", "—", this.state.lastPrice, 0, null,
+        "Новая цель чистой прибыли применяется к открытым и новым позициям", Date.now());
+      await this.persist();
       return this.json(this.snapshot());
     }
     if (method === "POST" && url.pathname === "/profit-goal") {
