@@ -8,7 +8,7 @@ function blankState(balance) {
   return {
     startBalance: balance, realized: 0, peakEquity: balance, maxDrawdown: 0,
     lastPrice: 0, lastTradeTime: 0, tickCount: 0, events: [], prices: [],
-    closedPositions: [], closedNotional: 0, closedVolumeBaseline: 0, draining: false, runActiveMs: 0, runLastStartedAt: null,
+    closedPositions: [], closedNotional: 0, goalBaseline: 0, goalModeVersion: 1, draining: false, runActiveMs: 0, runLastStartedAt: null,
     sides: { long: { pending: [], positions: [], center: 0 }, short: { pending: [], positions: [], center: 0 } },
     initialized: false, running: false, halted: false, haltReason: "",
     reentryUntil: 0, lastGridRefreshAt: 0, lastSavedAt: 0, connected: false
@@ -20,12 +20,12 @@ function cleanConfig(c) {
     levels: Math.floor(Number(c.levels)), stepUsd: Number(c.stepUsd),
     feePercent: Number(c.feePercent), slippagePercent: Number(c.slippagePercent),
     profitUsd: Number(c.profitUsd), stopLossUsd: Number(c.stopLossUsd),
-    closedVolumeLimitUsd: Number(c.closedVolumeLimitUsd || 0),
+    profitGoalUsd: Number(c.profitGoalUsd || 0),
     sessionLossPct: Number(c.sessionLossPct), exposurePct: Number(c.exposurePct)
   };
   if (Object.values(out).some(x => !Number.isFinite(x)) || out.startBalance <= 0 ||
       out.positionUsd <= 0 || out.levels < 1 || out.levels > 50 || out.stepUsd <= 0 ||
-      out.feePercent < 0 || out.slippagePercent < 0 || out.closedVolumeLimitUsd < 0 || out.profitUsd < 10 || out.profitUsd > 100 ||
+      out.feePercent < 0 || out.slippagePercent < 0 || out.profitGoalUsd < 0 || out.profitUsd < 10 || out.profitUsd > 100 ||
       out.stopLossUsd <= 0 || out.sessionLossPct <= 0 || out.exposurePct <= 0 || out.exposurePct > 500) {
     throw new Error("Проверь настройки PAPER: цель чистой прибыли должна быть от 10 до 100 USDT; остальные значения должны быть положительными.");
   }
@@ -48,9 +48,15 @@ export class PaperBot {
     this.state = await this.ctx.storage.get("state") || blankState(10000);
     this.cfg = await this.ctx.storage.get("cfg") || null;
     if (this.state.closedNotional == null) this.state.closedNotional = (this.state.closedPositions || []).reduce((sum, p) => sum + (Number(p.notional) || 0), 0);
-    if (this.state.closedVolumeBaseline == null) this.state.closedVolumeBaseline = this.state.closedNotional;
+    if (this.state.goalModeVersion !== 1) {
+      this.state.goalBaseline = Number(this.state.realized) || 0;
+      this.state.draining = false;
+      this.state.goalModeVersion = 1;
+      if (this.cfg) { this.cfg.profitGoalUsd = 2000; delete this.cfg.closedVolumeLimitUsd; }
+    }
+    if (this.state.goalBaseline == null) this.state.goalBaseline = Number(this.state.realized) || 0;
     if (this.state.draining == null) this.state.draining = false;
-    if (this.cfg && this.cfg.closedVolumeLimitUsd == null) this.cfg.closedVolumeLimitUsd = 2000;
+    if (this.cfg && this.cfg.profitGoalUsd == null) this.cfg.profitGoalUsd = 2000;
     this.orderId = Number(await this.ctx.storage.get("orderId")) || 0;
     if (this.state.running) {
       this.state.connected = false;
@@ -85,18 +91,18 @@ export class PaperBot {
       this.ctx.waitUntil(this.connectFeed());
       return this.json(this.snapshot());
     }
-    if (method === "POST" && url.pathname === "/closed-volume-limit") {
+    if (method === "POST" && url.pathname === "/profit-goal") {
       if (!this.cfg) return this.json({ error: "Сначала запустите или настройте PAPER-сессию." }, 409);
       const body = await request.json().catch(() => ({}));
-      const limit = Number(body.limitUsd);
-      if (!Number.isFinite(limit) || limit < 0) return this.json({ error: "Лимит должен быть 0 (выключен) или положительной суммой USDT." }, 400);
-      this.cfg.closedVolumeLimitUsd = limit;
-      this.state.closedVolumeBaseline = Number(this.state.closedNotional) || 0;
+      const goal = Number(body.goalUsd);
+      if (!Number.isFinite(goal) || goal < 0) return this.json({ error: "Укажите 0 (выключено) или положительную цель в USDT." }, 400);
+      this.cfg.profitGoalUsd = goal;
+      this.state.goalBaseline = Number(this.state.realized) || 0;
       this.state.draining = false;
       if (this.state.running) {
         this.state.sides.long.pending = []; this.state.sides.short.pending = [];
-        if (limit === 0) this.addEvent("Лимит закрытого объёма выключен", "—", this.state.lastPrice, 0, null, "Новые входы разрешены", Date.now());
-        else this.addEvent("Лимит закрытого объёма применён", "—", this.state.lastPrice, 0, null, "Отсчёт начинается с текущего момента; ожидающие уровни сняты", Date.now());
+        this.addEvent("Цель заработка применена", "—", this.state.lastPrice, 0, null,
+          goal === 0 ? "Ограничение отключено; новые входы разрешены" : "Отсчёт чистой прибыли начинается с этого момента; ожидающие уровни сняты", Date.now());
       }
       await this.persist();
       return this.json(this.snapshot());
@@ -208,13 +214,13 @@ export class PaperBot {
     });
     if (this.state.closedPositions.length > MAX_CLOSED) this.state.closedPositions.length = MAX_CLOSED;
     this.addEvent("Позиция закрыта", side.toUpperCase(), price, 1, pnl, reason, ts);
-    const limit = Number(this.cfg.closedVolumeLimitUsd) || 0;
-    const closedSinceLimit = Math.max(0, this.state.closedNotional - (Number(this.state.closedVolumeBaseline) || 0));
-    if (!this.state.draining && limit > 0 && closedSinceLimit >= limit) {
+    const goal = Number(this.cfg.profitGoalUsd) || 0;
+    const netProfitSinceGoal = (Number(this.state.realized) || 0) - (Number(this.state.goalBaseline) || 0);
+    if (!this.state.draining && goal > 0 && netProfitSinceGoal >= goal) {
       this.state.draining = true;
       this.state.sides.long.pending = []; this.state.sides.short.pending = [];
-      this.addEvent("Лимит закрытого объёма достигнут", "—", price, 0, null,
-        "Новые входы остановлены; открытые позиции продолжают ждать свою цель", ts);
+      this.addEvent("Цель заработка достигнута", "—", price, 0, netProfitSinceGoal,
+        "Новые входы остановлены; открытые позиции ждут свои цели", ts);
     }
     if (this.state.draining && this.openCount() === 0 && this.state.running) {
       this.addEvent("PAPER завершён", "—", price, 0, null, "Все оставшиеся позиции закрыты", ts);
@@ -358,9 +364,9 @@ export class PaperBot {
       runtimeMs: s.runActiveMs + (s.running && s.runLastStartedAt ? Math.max(0, Date.now() - s.runLastStartedAt) : 0),
       maxDrawdown: s.maxDrawdown, halted: s.halted, haltReason: s.haltReason,
       closedNotional: Number(s.closedNotional) || 0,
-      closedVolumeProgress: Math.max(0, (Number(s.closedNotional) || 0) - (Number(s.closedVolumeBaseline) || 0)),
+      profitGoalProgress: (Number(s.realized) || 0) - (Number(s.goalBaseline) || 0),
       draining: Boolean(s.draining),
-      config: cfg ? { startBalance: cfg.startBalance, positionUsd: cfg.positionUsd, levels: cfg.levels, stepUsd: cfg.stepUsd, closedVolumeLimitUsd: Number(cfg.closedVolumeLimitUsd) || 0,
+      config: cfg ? { startBalance: cfg.startBalance, positionUsd: cfg.positionUsd, levels: cfg.levels, stepUsd: cfg.stepUsd, profitGoalUsd: Number(cfg.profitGoalUsd) || 0,
         feePercent: cfg.feePercent, slippagePercent: cfg.slippagePercent, profitUsd: cfg.profitUsd, stopLossUsd: cfg.stopLossUsd,
         sessionLossPct: cfg.sessionLossPct, exposurePct: cfg.exposurePct } : null,
       openPositions: ["long","short"].flatMap(side => s.sides[side].positions.map(p => ({ ...p, pnl: s.lastPrice ? this.positionPnl(p, s.lastPrice) : 0 }))).sort((a,b) => b.openedAt-a.openedAt),
