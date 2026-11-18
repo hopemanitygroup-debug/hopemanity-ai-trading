@@ -87,7 +87,7 @@ var SID_KEY="hopemanity_paper_background_session_id";
 var SID=localStorage.getItem(SID_KEY);
 if(!SID){SID=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(36).slice(2));localStorage.setItem(SID_KEY,SID);}
 var SESSION_KEY="hopemanity_csv_stop_grid_session_v8";
-var running=false, initialized=false, latest=null, timer=null;
+var running=false, initialized=false, latest=null, timer=null, configDirty=false;
 var $=function(id){return document.getElementById(id);};
 function money(x){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(Number(x)||0);}
 function priceText(x){return Number(x)>0?new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}).format(x):"—";}
@@ -122,7 +122,7 @@ $("flattenButton").disabled=!s.openCount;
 $("resetButton").disabled=s.running;
 $("applyClosedVolumeLimit").disabled=!initialized;$("applyPositionProfit").disabled=!initialized;
 ["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput","profitGoalInput"].forEach(function(id){$(id).disabled=running;});$("saveConfigButton").disabled=running;
-if(s.config&&!s.running)fillConfig(s.config);
+if(s.config&&!s.running&&!configDirty)fillConfig(s.config);
 renderOpen(s.openPositions||[]);renderClosed(s.closedPositions||[]);renderEvents(s.events||[]);
 }
 function fillConfig(c){
@@ -158,9 +158,9 @@ var map={balanceInput:"balanceInput",positionUsdInput:"positionUsdInput",levelsI
 Object.keys(map).forEach(function(id){if(saved.settings[id]!=null)$(id).value=saved.settings[id];});
 }catch(e){}
 }
-$("saveConfigButton").addEventListener("click",async function(){try{await call("/config","POST",{config:config()});await poll();setError("Настройки сохранены. История и открытые позиции сохранены.");}catch(e){setError(e.message);}});
+$("saveConfigButton").addEventListener("click",async function(){try{await call("/config","POST",{config:config()});configDirty=false;await poll();setError("Настройки сохранены. История и открытые позиции сохранены.");}catch(e){setError(e.message);}});
 $("startButton").addEventListener("click",async function(){
-try{setError("");await call("/start","POST",{config:config()});await poll();}
+try{setError("");if(initialized&&configDirty){await call("/config","POST",{config:config()});configDirty=false;}await call("/start","POST",{config:config()});await poll();}
 catch(e){setError(e.message);}
 });
 $("stopButton").addEventListener("click",async function(){try{await call("/stop","POST",{});await poll();}catch(e){setError(e.message);}});
@@ -171,8 +171,9 @@ await call("/profit-goal","POST",{goalUsd:goal});await poll();setError(running?"
 catch(e){setError(e.message);}
 });
 $("flattenButton").addEventListener("click",async function(){if(!confirm("Закрыть все виртуальные позиции по текущей цене?"))return;try{await call("/flatten","POST",{});await poll();}catch(e){setError(e.message);}});
-$("resetButton").addEventListener("click",async function(){if(!confirm("Сбросить серверную PAPER-сессию и удалить её историю?"))return;try{await call("/reset","POST",{startBalance:val("balanceInput")});$("profitInput").value=Math.max(10,Math.min(100,Number($("profitInput").value)||10));await poll();}catch(e){setError(e.message);}});
+$("resetButton").addEventListener("click",async function(){if(!confirm("Сбросить серверную PAPER-сессию и удалить её историю?"))return;try{await call("/reset","POST",{startBalance:val("balanceInput")});$("profitInput").value=Math.max(1,Math.min(100,Number($("profitInput").value)||1));configDirty=false;await poll();}catch(e){setError(e.message);}});
 $("openRows").addEventListener("click",async function(e){var id=e.target&&e.target.getAttribute("data-close");if(!id)return;try{await call("/close/"+id,"POST",{});await poll();}catch(err){setError(err.message);}});
+["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","profitGoalInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).addEventListener("input",function(){configDirty=true;});});
 importPreviousSettings();
 poll();timer=setInterval(poll,1200);
 window.addEventListener("beforeunload",function(){if(timer)clearInterval(timer);});
