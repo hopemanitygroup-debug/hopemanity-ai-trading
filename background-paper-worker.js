@@ -20,10 +20,10 @@ function cleanConfig(c) {
     levels: Math.floor(Number(c.levels)), stepUsd: Number(c.stepUsd),
     feePercent: Number(c.feePercent), slippagePercent: Number(c.slippagePercent),
     profitUsd: Number(c.profitUsd), stopLossUsd: Number(c.stopLossUsd),
-    profitGoalUsd: Number(c.profitGoalUsd || 0),
+    profitGoalUsd: Number(c.profitGoalUsd || 0), directionMode: String(c.directionMode || "both"),
     sessionLossPct: Number(c.sessionLossPct), exposurePct: Number(c.exposurePct)
   };
-  if (Object.values(out).some(x => !Number.isFinite(x)) || out.startBalance <= 0 ||
+  if (Object.entries(out).some(([k,v]) => k !== "directionMode" && !Number.isFinite(v)) || !["both","long","short","auto"].includes(out.directionMode) || out.startBalance <= 0 ||
       out.positionUsd <= 0 || out.levels < 1 || out.levels > 50 || out.stepUsd <= 0 ||
       out.feePercent < 0 || out.slippagePercent < 0 || out.profitGoalUsd < 0 || out.profitUsd < 1 || out.profitUsd > 100 ||
       out.stopLossUsd <= 0 || out.sessionLossPct <= 0 || out.exposurePct <= 0 || out.exposurePct > 500) {
@@ -190,7 +190,21 @@ export class PaperBot {
     this.state.events.unshift({ time: time || Date.now(), type, side, price: price || 0, count: count || 0, pnl: pnl == null ? null : pnl, reason: reason || "" });
     if (this.state.events.length > MAX_EVENTS) this.state.events.length = MAX_EVENTS;
   }
+  directionAt(price) {
+    if (this.cfg.directionMode === "long" || this.cfg.directionMode === "short") return this.cfg.directionMode;
+    if (this.cfg.directionMode !== "auto") return "both";
+    const hist = this.state.prices || [];
+    const lookback = 60;
+    if (hist.length < lookback) return "wait";
+    const base = hist[hist.length - lookback];
+    const movePct = base > 0 ? (price - base) / base * 100 : 0;
+    if (movePct >= 0.03) return "long";
+    if (movePct <= -0.03) return "short";
+    return "wait";
+  }
   placeGrid(side, center) {
+    const direction = this.directionAt(center);
+    if ((direction === "long" && side === "short") || (direction === "short" && side === "long") || direction === "wait") { this.state.sides[side].pending = []; return; }
     if (this.state.draining) { this.state.sides[side].pending = []; return; }
     const dir = side === "long" ? 1 : -1;
     const levels = [];
@@ -205,7 +219,7 @@ export class PaperBot {
     this.addEvent("Сетка выставлена", "LONG / SHORT", price, this.cfg.levels * 2, null, "Поток цен обрабатывается сервером", ts);
   }
   openPosition(side, level, price, ts) {
-    if (this.state.draining || this.openCount() >= MAX_OPEN_TOTAL || this.state.sides[side].positions.length >= MAX_OPEN_PER_SIDE) return false;
+    if (this.state.draining || (this.directionAt(price) !== "both" && this.directionAt(price) !== side) || this.openCount() >= MAX_OPEN_TOTAL || this.state.sides[side].positions.length >= MAX_OPEN_PER_SIDE) return false;
     const base = side === "long" ? Math.max(price, level.price) : Math.min(price, level.price);
     const fill = side === "long" ? base * (1 + this.cfg.slipRate) : base * (1 - this.cfg.slipRate);
     const qty = this.cfg.positionUsd / fill, notional = qty * fill;
@@ -217,6 +231,8 @@ export class PaperBot {
     return true;
   }
   processEntries(side, price, ts) {
+    const direction = this.directionAt(price);
+    if (direction === "wait" || (direction !== "both" && direction !== side)) { this.state.sides[side].pending = []; return; }
     if (this.state.draining) { this.state.sides[side].pending = []; return; }
     let opened = 0, skipped = 0; const remain = [];
     for (const level of this.state.sides[side].pending) {
@@ -392,7 +408,7 @@ export class PaperBot {
       closedNotional: Number(s.closedNotional) || 0,
       profitGoalProgress: (Number(s.realized) || 0) - (Number(s.goalBaseline) || 0),
       draining: Boolean(s.draining),
-      config: cfg ? { startBalance: cfg.startBalance, positionUsd: cfg.positionUsd, levels: cfg.levels, stepUsd: cfg.stepUsd, profitGoalUsd: Number(cfg.profitGoalUsd) || 0,
+      config: cfg ? { startBalance: cfg.startBalance, positionUsd: cfg.positionUsd, levels: cfg.levels, stepUsd: cfg.stepUsd, profitGoalUsd: Number(cfg.profitGoalUsd) || 0, directionMode: cfg.directionMode || "both",
         feePercent: cfg.feePercent, slippagePercent: cfg.slippagePercent, profitUsd: cfg.profitUsd, stopLossUsd: cfg.stopLossUsd,
         sessionLossPct: cfg.sessionLossPct, exposurePct: cfg.exposurePct } : null,
       openPositions: ["long","short"].flatMap(side => s.sides[side].positions.map(p => ({ ...p, pnl: s.lastPrice ? this.positionPnl(p, s.lastPrice) : 0 }))).sort((a,b) => b.openedAt-a.openedAt),
