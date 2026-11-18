@@ -91,6 +91,20 @@ export class PaperBot {
       this.ctx.waitUntil(this.connectFeed());
       return this.json(this.snapshot());
     }
+    if (method === "POST" && url.pathname === "/config") {
+      if (this.state.running) return this.json({ error: "Сначала остановите PAPER, чтобы применить настройки." }, 409);
+      if (this.state.halted) return this.json({ error: "Сбросьте остановленную по убытку PAPER-сессию перед изменением настроек." }, 409);
+      const body = await request.json().catch(() => ({}));
+      try { this.cfg = cleanConfig(body.config || {}); } catch (e) { return this.json({ error: e.message }, 400); }
+      if (!this.state.initialized) this.state = blankState(this.cfg.startBalance);
+      this.state.startBalance = this.cfg.startBalance;
+      this.state.goalBaseline = Number(this.state.realized) || 0;
+      this.state.draining = false;
+      this.state.sides.long.pending = []; this.state.sides.short.pending = [];
+      this.addEvent("Настройки PAPER сохранены", "—", this.state.lastPrice, 0, null, "Позиции и история сохранены", Date.now());
+      await this.persist();
+      return this.json(this.snapshot());
+    }
     if (method === "POST" && url.pathname === "/position-profit") {
       if (!this.cfg) return this.json({ error: "Сначала запустите или настройте PAPER-сессию." }, 409);
       const body = await request.json().catch(() => ({}));
