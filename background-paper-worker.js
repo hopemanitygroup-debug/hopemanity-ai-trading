@@ -24,9 +24,9 @@ function cleanConfig(c) {
   };
   if (Object.values(out).some(x => !Number.isFinite(x)) || out.startBalance <= 0 ||
       out.positionUsd <= 0 || out.levels < 1 || out.levels > 50 || out.stepUsd <= 0 ||
-      out.feePercent < 0 || out.slippagePercent < 0 || out.profitUsd <= 0 ||
+      out.feePercent < 0 || out.slippagePercent < 0 || out.profitUsd < 10 || out.profitUsd > 100 ||
       out.stopLossUsd <= 0 || out.sessionLossPct <= 0 || out.exposurePct <= 0 || out.exposurePct > 500) {
-    throw new Error("Проверь настройки PAPER: некорректное или отрицательное значение.");
+    throw new Error("Проверь настройки PAPER: цель чистой прибыли должна быть от 10 до 100 USDT; остальные значения должны быть положительными.");
   }
   out.feeRate = out.feePercent / 100;
   out.slipRate = out.slippagePercent / 100;
