@@ -41,7 +41,7 @@ footer{max-width:1120px;margin:auto;padding:4px 18px 28px;color:var(--muted);fon
 <div class="metric"><label>Открытые позиции</label><div class="value" id="openCount">0 / 80</div><small id="exposure">Экспозиция —</small></div>
 <div class="metric"><label>Время работы PAPER</label><div class="value" id="runtime">00:00:00</div><small id="runtimeDetail">Серверная сессия</small></div>
 <div class="metric"><label>Ожидающие уровни</label><div class="value" id="pendingCount">0</div><small id="pendingDetail">LONG 0 · SHORT 0</small></div>
-<div class="metric"><label>Закрытый объём по лимиту</label><div class="value" id="closedVolume">$0 / $2,000</div><small id="closedVolumeDetail">Новые входы разрешены</small></div>
+<div class="metric"><label>Чистый заработок по цели</label><div class="value" id="profitGoalProgress">$0 / $2,000</div><small id="profitGoalDetail">Новые входы разрешены</small></div>
 <div class="metric"><label>Максимальная просадка</label><div class="value" id="drawdown">0.00%</div><small id="ticks">Тиков: 0</small></div>
 </section>
 
@@ -55,13 +55,13 @@ footer{max-width:1120px;margin:auto;padding:4px 18px 28px;color:var(--muted);fon
 <label>Комиссия за сторону, %<input id="feeInput" type="number" min="0" step="0.01" value="0.05"></label>
 <label>Проскальзывание за сторону, %<input id="slippageInput" type="number" min="0" step="0.01" value="0.02"></label>
 <label>Цель чистой прибыли позиции, USDT<input id="profitInput" type="number" min="10" max="100" step="1" value="10"></label>
-<label>Лимит закрытого объёма, USDT<input id="closedVolumeLimitInput" type="number" min="0" step="100" value="2000"></label>
+<label>Цель чистого заработка, USDT<input id="profitGoalInput" type="number" min="0" step="100" value="2000"></label>
 <label>Стоп-лосс корзины, USDT<input id="stopLossInput" type="number" min="0.01" step="1" value="10"></label>
 <label>Остановка сессии при убытке, %<input id="sessionLossInput" type="number" min="0.1" step="0.1" value="2"></label>
 <label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="500" step="1" value="100"></label>
 </div>
-<p class="muted">PAPER ждёт выбранную цель чистой прибыли на каждую позицию: её можно задать от $10 до $100. Учтены комиссия и проскальзывание при входе и выходе. Если цена резко перескочит цель между тиками, итог может быть выше заданной суммы. Лимит закрытого объёма считает сумму номиналов закрытых позиций; после его достижения новые входы и ожидающие уровни прекращаются, а уже открытые позиции продолжают работать до своих целей. Значение 0 выключает лимит. Стоп-лоссы корзины и сессии сохраняются. Сервис не отправляет сделки на биржу.</p>
-<div class="actions"><div class="row"><button class="primary" id="startButton">Запустить серверный PAPER</button><button id="stopButton" disabled>Остановить</button><button class="danger" id="flattenButton">Закрыть все виртуальные позиции</button></div><div class="row"><button id="applyClosedVolumeLimit">Применить лимит закрытого объёма</button><button id="resetButton">Сбросить сессию</button></div></div>
+<p class="muted">PAPER ждёт выбранную цель чистой прибыли на каждую позицию: её можно задать от $10 до $100. Учтены комиссия и проскальзывание при входе и выходе. Если цена резко перескочит цель между тиками, итог может быть выше заданной суммы. Цель чистого заработка считает реализованный P&amp;L закрытых позиций после комиссии и проскальзывания; после её достижения новые входы и ожидающие уровни прекращаются, а уже открытые позиции продолжают работать до своих целей. Значение 0 выключает цель. Стоп-лоссы корзины и сессии сохраняются. Сервис не отправляет сделки на биржу.</p>
+<div class="actions"><div class="row"><button class="primary" id="startButton">Запустить серверный PAPER</button><button id="stopButton" disabled>Остановить</button><button class="danger" id="flattenButton">Закрыть все виртуальные позиции</button></div><div class="row"><button id="applyClosedVolumeLimit">Применить цель заработка</button><button id="resetButton">Сбросить сессию</button></div></div>
 <div id="error" class="muted" style="margin-top:10px"></div>
 </section>
 
@@ -103,7 +103,7 @@ if(!response.ok)throw new Error(data.error||("HTTP "+response.status));return da
 function setError(text){$("error").textContent=text||"";}
 function render(s){
 latest=s;running=Boolean(s.running);initialized=Boolean(s.config);
-$("status").textContent=s.draining?(s.openCount?"Лимит достигнут · ждём цели позиций":"Лимит закрытого объёма выполнен"):s.running?(s.connected?"PAPER работает на сервере":"Сервер переподключает поток"):s.halted?"PAPER остановлен по лимиту убытка":s.config?"Сессия сохранена · остановлена":"Не запущен";
+$("status").textContent=s.draining?(s.openCount?"Цель достигнута · ждём цели позиций":"Цель заработка достигнута"):s.running?(s.connected?"PAPER работает на сервере":"Сервер переподключает поток"):s.halted?"PAPER остановлен по лимиту убытка":s.config?"Сессия сохранена · остановлена":"Не запущен";
 $("statusDot").className="dot"+(s.running&&s.connected?" good":s.halted?" bad":"");
 $("price").textContent=s.price?priceText(s.price):"—";
 $("feedInfo").textContent=s.connected?"Поток Binance подключён · тиков: "+s.tickCount:(s.feedError||"Ожидание потока");
@@ -114,9 +114,9 @@ $("openCount").textContent=s.openCount+" / 80";$("exposure").textContent="Экс
 $("runtime").textContent=duration(s.runtimeMs);$("runtimeDetail").textContent=s.running?"PAPER сейчас работает на сервере":"Накопленное время PAPER";
 $("pendingCount").textContent=s.pendingCount;$("pendingDetail").textContent="LONG "+s.pendingLong+" · SHORT "+s.pendingShort;
 $("drawdown").textContent=(Number(s.maxDrawdown)||0).toFixed(2)+"%";$("ticks").textContent="Тиков: "+s.tickCount;
-var closedLimit=Number(s.config&&s.config.closedVolumeLimitUsd)||0, closedProgress=Number(s.closedVolumeProgress)||0;
-$("closedVolume").textContent=money(closedProgress)+" / "+(closedLimit?money(closedLimit):"выкл.");
-$("closedVolumeDetail").textContent=s.draining?(s.openCount?"Лимит достигнут · ждём цели открытых позиций":"Лимит достигнут · позиции закрыты"):closedLimit?"Считается с момента применения лимита":"Лимит выключен";
+var profitGoal=Number(s.config&&s.config.profitGoalUsd)||0, profitProgress=Number(s.profitGoalProgress)||0;
+$("profitGoalProgress").textContent=money(profitProgress)+" / "+(profitGoal?money(profitGoal):"выкл.");
+$("profitGoalDetail").textContent=s.draining?(s.openCount?"Цель достигнута · ждём цели открытых позиций":"Цель достигнута · позиции закрыты"):profitGoal?"Считается чистый закрытый P&L с момента применения":"Цель выключена";
 $("startButton").disabled=s.running||s.halted||initialized;$("stopButton").disabled=!s.running;
 $("flattenButton").disabled=!s.openCount;
 $("resetButton").disabled=s.running;
@@ -129,7 +129,7 @@ function fillConfig(c){
 $("balanceInput").value=c.startBalance;$("positionUsdInput").value=c.positionUsd;$("levelsInput").value=c.levels;$("stepInput").value=c.stepUsd;
 $("feeInput").value=c.feePercent;$("slippageInput").value=c.slippagePercent;$("profitInput").value=c.profitUsd;$("stopLossInput").value=c.stopLossUsd;
 $("sessionLossInput").value=c.sessionLossPct;$("exposureInput").value=c.exposurePct;
-if(c.closedVolumeLimitUsd!=null)$("closedVolumeLimitInput").value=c.closedVolumeLimitUsd;
+if(c.profitGoalUsd!=null)$("profitGoalInput").value=c.profitGoalUsd;
 }
 function renderOpen(rows){
 $("openTableCount").textContent=rows.length+" позиций";
@@ -154,7 +154,7 @@ function importPreviousSettings(){
 try{
 var saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");
 if(!saved||!saved.settings)return;
-var map={balanceInput:"balanceInput",positionUsdInput:"positionUsdInput",levelsInput:"levelsInput",stepInput:"stepInput",feeInput:"feeInput",slippageInput:"slippageInput",profitInput:"profitInput",stopLossInput:"stopLossInput",sessionLossInput:"sessionLossInput",exposureInput:"exposureInput"};
+var map={balanceInput:"balanceInput",positionUsdInput:"positionUsdInput",levelsInput:"levelsInput",stepInput:"stepInput",feeInput:"feeInput",slippageInput:"slippageInput",profitInput:"profitInput",profitGoalInput:"profitGoalInput",stopLossInput:"stopLossInput",sessionLossInput:"sessionLossInput",exposureInput:"exposureInput"};
 Object.keys(map).forEach(function(id){if(saved.settings[id]!=null)$(id).value=saved.settings[id];});
 }catch(e){}
 }
@@ -164,8 +164,8 @@ catch(e){setError(e.message);}
 });
 $("stopButton").addEventListener("click",async function(){try{await call("/stop","POST",{});await poll();}catch(e){setError(e.message);}});
 $("applyClosedVolumeLimit").addEventListener("click",async function(){
-try{var limit=val("closedVolumeLimitInput");if(!Number.isFinite(limit)||limit<0)throw new Error("Укажите 0 или положительную сумму USDT.");
-await call("/closed-volume-limit","POST",{limitUsd:limit});await poll();setError("Лимит применён. Отсчёт начинается с этого момента; открытые позиции сохранены.");}
+try{var goal=val("profitGoalInput");if(!Number.isFinite(goal)||goal<0)throw new Error("Укажите 0 или положительную цель в USDT.");
+await call("/profit-goal","POST",{goalUsd:goal});await poll();setError("Цель заработка применена. Отсчёт чистого P&L начинается с этого момента; открытые позиции сохранены.");}
 catch(e){setError(e.message);}
 });
 $("flattenButton").addEventListener("click",async function(){if(!confirm("Закрыть все виртуальные позиции по текущей цене?"))return;try{await call("/flatten","POST",{});await poll();}catch(e){setError(e.message);}});
