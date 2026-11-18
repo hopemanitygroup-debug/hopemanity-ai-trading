@@ -21,7 +21,7 @@ h1{font-size:22px;margin:0}h2{font-size:18px;margin:0 0 12px}.muted,small{color:
 .positive{color:var(--green)}.negative{color:var(--red)}
 .controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 label{display:block;color:var(--muted);font-size:13px}input{display:block;width:100%;margin-top:6px;padding:12px;border:1px solid var(--line);border-radius:11px;background:#091810;color:#e8fff2;font:inherit}
-input:disabled{opacity:.65}button{padding:11px 14px;border:1px solid var(--line);border-radius:11px;background:#142b21;color:#e8fff2;font:inherit;cursor:pointer}
+input:disabled{opacity:.65}select{display:block;width:100%;margin-top:6px;padding:12px;border:1px solid var(--line);border-radius:11px;background:#091810;color:#e8fff2;font:inherit}button{padding:11px 14px;border:1px solid var(--line);border-radius:11px;background:#142b21;color:#e8fff2;font:inherit;cursor:pointer}
 button.primary{background:#24533c;border-color:#438161;font-weight:700}button.danger{border-color:#7d4149;color:#ffb1b5}button:disabled{opacity:.45;cursor:not-allowed}
 .actions,.row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.actions{margin-top:14px}
 .scroll{overflow:auto;border:1px solid var(--line);border-radius:12px}table{width:100%;border-collapse:collapse;min-width:690px}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #254535;white-space:nowrap}th{color:var(--muted);font-weight:600}tr:last-child td{border-bottom:0}.empty{text-align:center;color:var(--muted);padding:18px}
@@ -48,6 +48,7 @@ footer{max-width:1120px;margin:auto;padding:4px 18px 28px;color:var(--muted);fon
 <section class="card">
 <h2>Настройки PAPER</h2>
 <div class="controls">
+<label>Направление входов<select id="directionMode"><option value="both">Обе стороны</option><option value="long">Только LONG</option><option value="short">Только SHORT</option><option value="auto">По направлению цены</option></select></label>
 <label>Виртуальный баланс, USDT<input id="balanceInput" type="number" min="100" step="100" value="10000"></label>
 <label>Сумма одной позиции, USDT<input id="positionUsdInput" type="number" min="5" step="5" value="100"></label>
 <label>Уровней на сторону<input id="levelsInput" type="number" min="1" max="50" step="1" value="20"></label>
@@ -94,7 +95,7 @@ function priceText(x){return Number(x)>0?new Intl.NumberFormat("en-US",{minimumF
 function timeText(ms){return ms?new Date(ms).toLocaleTimeString("ru-RU",{hour12:false}):"—";}
 function duration(ms){var sec=Math.floor(Math.max(0,ms)/1000),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),ss=sec%60;return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+String(ss).padStart(2,"0");}
 function val(id){return Number($(id).value);}
-function config(){return {startBalance:val("balanceInput"),positionUsd:val("positionUsdInput"),levels:val("levelsInput"),stepUsd:val("stepInput"),feePercent:val("feeInput"),slippagePercent:val("slippageInput"),profitUsd:val("profitInput"),stopLossUsd:val("stopLossInput"),sessionLossPct:val("sessionLossInput"),exposurePct:val("exposureInput"),profitGoalUsd:val("profitGoalInput")};}
+function config(){return {startBalance:val("balanceInput"),positionUsd:val("positionUsdInput"),levels:val("levelsInput"),stepUsd:val("stepInput"),feePercent:val("feeInput"),slippagePercent:val("slippageInput"),profitUsd:val("profitInput"),stopLossUsd:val("stopLossInput"),sessionLossPct:val("sessionLossInput"),exposurePct:val("exposureInput"),profitGoalUsd:val("profitGoalInput"),directionMode:$("directionMode").value};}
 async function call(path,method,body){
 var response=await fetch(API+encodeURIComponent(SID)+path,{method:method||"GET",headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,cache:"no-store"});
 var data=await response.json().catch(function(){return {error:"Сервер вернул некорректный ответ"};});
@@ -129,7 +130,7 @@ function fillConfig(c){
 $("balanceInput").value=c.startBalance;$("positionUsdInput").value=c.positionUsd;$("levelsInput").value=c.levels;$("stepInput").value=c.stepUsd;
 $("feeInput").value=c.feePercent;$("slippageInput").value=c.slippagePercent;$("profitInput").value=c.profitUsd;$("stopLossInput").value=c.stopLossUsd;
 $("sessionLossInput").value=c.sessionLossPct;$("exposureInput").value=c.exposurePct;
-if(c.profitGoalUsd!=null)$("profitGoalInput").value=c.profitGoalUsd;
+if(c.profitGoalUsd!=null)$("profitGoalInput").value=c.profitGoalUsd;$("directionMode").value=c.directionMode||"both";
 }
 function renderOpen(rows){
 $("openTableCount").textContent=rows.length+" позиций";
@@ -154,7 +155,7 @@ function importPreviousSettings(){
 try{
 var saved=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");
 if(!saved||!saved.settings)return;
-var map={balanceInput:"balanceInput",positionUsdInput:"positionUsdInput",levelsInput:"levelsInput",stepInput:"stepInput",feeInput:"feeInput",slippageInput:"slippageInput",profitInput:"profitInput",profitGoalInput:"profitGoalInput",stopLossInput:"stopLossInput",sessionLossInput:"sessionLossInput",exposureInput:"exposureInput"};
+var map={balanceInput:"balanceInput",positionUsdInput:"positionUsdInput",levelsInput:"levelsInput",stepInput:"stepInput",feeInput:"feeInput",slippageInput:"slippageInput",profitInput:"profitInput",profitGoalInput:"profitGoalInput",stopLossInput:"stopLossInput",sessionLossInput:"sessionLossInput",exposureInput:"exposureInput",directionMode:"directionMode"};
 Object.keys(map).forEach(function(id){if(saved.settings[id]!=null)$(id).value=saved.settings[id];});
 }catch(e){}
 }
@@ -173,7 +174,7 @@ catch(e){setError(e.message);}
 $("flattenButton").addEventListener("click",async function(){if(!confirm("Закрыть все виртуальные позиции по текущей цене?"))return;try{await call("/flatten","POST",{});await poll();}catch(e){setError(e.message);}});
 $("resetButton").addEventListener("click",async function(){if(!confirm("Сбросить серверную PAPER-сессию и удалить её историю?"))return;try{await call("/reset","POST",{startBalance:val("balanceInput")});$("profitInput").value=Math.max(1,Math.min(100,Number($("profitInput").value)||1));configDirty=false;await poll();}catch(e){setError(e.message);}});
 $("openRows").addEventListener("click",async function(e){var id=e.target&&e.target.getAttribute("data-close");if(!id)return;try{await call("/close/"+id,"POST",{});await poll();}catch(err){setError(err.message);}});
-["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","profitGoalInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).addEventListener("input",function(){configDirty=true;});});
+["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","profitGoalInput","stopLossInput","sessionLossInput","exposureInput","directionMode"].forEach(function(id){$(id).addEventListener("input",function(){configDirty=true;});});
 importPreviousSettings();
 poll();timer=setInterval(poll,1200);
 window.addEventListener("beforeunload",function(){if(timer)clearInterval(timer);});
