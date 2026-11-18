@@ -53,12 +53,12 @@ footer{max-width:1120px;margin:auto;padding:4px 18px 28px;color:var(--muted);fon
 <label>Шаг уровня, USD<input id="stepInput" type="number" min="0.01" step="0.01" value="3"></label>
 <label>Комиссия за сторону, %<input id="feeInput" type="number" min="0" step="0.01" value="0.05"></label>
 <label>Проскальзывание за сторону, %<input id="slippageInput" type="number" min="0" step="0.01" value="0.02"></label>
-<label>Минимальная чистая прибыль позиции, USDT<input id="profitInput" type="number" min="0.01" step="0.01" value="0.10"></label>
+<label>Цель чистой прибыли позиции, USDT<input id="profitInput" type="number" min="10" max="100" step="1" value="10"></label>
 <label>Стоп-лосс корзины, USDT<input id="stopLossInput" type="number" min="0.01" step="1" value="10"></label>
 <label>Остановка сессии при убытке, %<input id="sessionLossInput" type="number" min="0.1" step="0.1" value="2"></label>
 <label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="500" step="1" value="100"></label>
 </div>
-<p class="muted">Комиссия и проскальзывание применяются при входе и выходе. Значения нужно указать по вашему тарифу Binance; сервис не отправляет сделки на биржу.</p>
+<p class="muted">PAPER ждёт выбранную цель чистой прибыли на каждую позицию: её можно задать от $10 до $100. Учтены комиссия и проскальзывание при входе и выходе. Если цена резко перескочит цель между тиками, итог может быть выше заданной суммы. Сервис не отправляет сделки на биржу.</p>
 <div class="actions"><div class="row"><button class="primary" id="startButton">Запустить серверный PAPER</button><button id="stopButton" disabled>Остановить</button><button class="danger" id="flattenButton">Закрыть все виртуальные позиции</button></div><button id="resetButton">Сбросить сессию</button></div>
 <div id="error" class="muted" style="margin-top:10px"></div>
 </section>
@@ -157,7 +157,7 @@ catch(e){setError(e.message);}
 });
 $("stopButton").addEventListener("click",async function(){try{await call("/stop","POST",{});await poll();}catch(e){setError(e.message);}});
 $("flattenButton").addEventListener("click",async function(){if(!confirm("Закрыть все виртуальные позиции по текущей цене?"))return;try{await call("/flatten","POST",{});await poll();}catch(e){setError(e.message);}});
-$("resetButton").addEventListener("click",async function(){if(!confirm("Сбросить серверную PAPER-сессию и удалить её историю?"))return;try{await call("/reset","POST",{startBalance:val("balanceInput")});await poll();}catch(e){setError(e.message);}});
+$("resetButton").addEventListener("click",async function(){if(!confirm("Сбросить серверную PAPER-сессию и удалить её историю?"))return;try{await call("/reset","POST",{startBalance:val("balanceInput")});$("profitInput").value=Math.max(10,Math.min(100,Number($("profitInput").value)||10));await poll();}catch(e){setError(e.message);}});
 $("openRows").addEventListener("click",async function(e){var id=e.target&&e.target.getAttribute("data-close");if(!id)return;try{await call("/close/"+id,"POST",{});await poll();}catch(err){setError(err.message);}});
 importPreviousSettings();
 poll();timer=setInterval(poll,1200);
