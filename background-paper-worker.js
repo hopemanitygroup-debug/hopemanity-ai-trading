@@ -20,11 +20,12 @@ function cleanConfig(c) {
     levels: Math.floor(Number(c.levels)), stepUsd: Number(c.stepUsd),
     feePercent: Number(c.feePercent), slippagePercent: Number(c.slippagePercent),
     profitUsd: Number(c.profitUsd), stopLossUsd: Number(c.stopLossUsd),
+    closedVolumeLimitUsd: Number(c.closedVolumeLimitUsd || 0),
     sessionLossPct: Number(c.sessionLossPct), exposurePct: Number(c.exposurePct)
   };
   if (Object.values(out).some(x => !Number.isFinite(x)) || out.startBalance <= 0 ||
       out.positionUsd <= 0 || out.levels < 1 || out.levels > 50 || out.stepUsd <= 0 ||
-      out.feePercent < 0 || out.slippagePercent < 0 || out.profitUsd < 10 || out.profitUsd > 100 ||
+      out.feePercent < 0 || out.slippagePercent < 0 || out.closedVolumeLimitUsd < 0 || out.profitUsd < 10 || out.profitUsd > 100 ||
       out.stopLossUsd <= 0 || out.sessionLossPct <= 0 || out.exposurePct <= 0 || out.exposurePct > 500) {
     throw new Error("Проверь настройки PAPER: цель чистой прибыли должна быть от 10 до 100 USDT; остальные значения должны быть положительными.");
   }
@@ -46,6 +47,10 @@ export class PaperBot {
   async load() {
     this.state = await this.ctx.storage.get("state") || blankState(10000);
     this.cfg = await this.ctx.storage.get("cfg") || null;
+    if (this.state.closedNotional == null) this.state.closedNotional = (this.state.closedPositions || []).reduce((sum, p) => sum + (Number(p.notional) || 0), 0);
+    if (this.state.closedVolumeBaseline == null) this.state.closedVolumeBaseline = this.state.closedNotional;
+    if (this.state.draining == null) this.state.draining = false;
+    if (this.cfg && this.cfg.closedVolumeLimitUsd == null) this.cfg.closedVolumeLimitUsd = 0;
     this.orderId = Number(await this.ctx.storage.get("orderId")) || 0;
     if (this.state.running) {
       this.state.connected = false;
@@ -66,6 +71,7 @@ export class PaperBot {
     if (method === "POST" && url.pathname === "/start") {
       const body = await request.json();
       if (this.state.halted) return this.json({ error: "Сессия остановлена по лимиту убытка. Сбросьте PAPER перед новым запуском." }, 409);
+      if (this.state.draining && this.openCount() === 0) return this.json({ error: "Лимит закрытого объёма уже завершил эту сессию. Примените новый лимит или сбросьте PAPER." }, 409);
       if (!this.state.initialized) {
         try { this.cfg = cleanConfig(body.config || {}); } catch (e) { return this.json({ error: e.message }, 400); }
         this.state = blankState(this.cfg.startBalance);
@@ -77,6 +83,22 @@ export class PaperBot {
       await this.persist();
       this.ensureAlarm(5 * 60 * 1000);
       this.ctx.waitUntil(this.connectFeed());
+      return this.json(this.snapshot());
+    }
+    if (method === "POST" && url.pathname === "/closed-volume-limit") {
+      if (!this.cfg) return this.json({ error: "Сначала запустите или настройте PAPER-сессию." }, 409);
+      const body = await request.json().catch(() => ({}));
+      const limit = Number(body.limitUsd);
+      if (!Number.isFinite(limit) || limit < 0) return this.json({ error: "Лимит должен быть 0 (выключен) или положительной суммой USDT." }, 400);
+      this.cfg.closedVolumeLimitUsd = limit;
+      this.state.closedVolumeBaseline = Number(this.state.closedNotional) || 0;
+      this.state.draining = false;
+      if (this.state.running) {
+        this.state.sides.long.pending = []; this.state.sides.short.pending = [];
+        if (limit === 0) this.addEvent("Лимит закрытого объёма выключен", "—", this.state.lastPrice, 0, null, "Новые входы разрешены", Date.now());
+        else this.addEvent("Лимит закрытого объёма применён", "—", this.state.lastPrice, 0, null, "Отсчёт начинается с текущего момента; ожидающие уровни сняты", Date.now());
+      }
+      await this.persist();
       return this.json(this.snapshot());
     }
     if (method === "POST" && url.pathname === "/stop") {
@@ -137,6 +159,7 @@ export class PaperBot {
     if (this.state.events.length > MAX_EVENTS) this.state.events.length = MAX_EVENTS;
   }
   placeGrid(side, center) {
+    if (this.state.draining) { this.state.sides[side].pending = []; return; }
     const dir = side === "long" ? 1 : -1;
     const levels = [];
     for (let i = 1; i <= this.cfg.levels; i++) levels.push({ level: i, price: center + dir * this.cfg.stepUsd * i });
@@ -150,7 +173,7 @@ export class PaperBot {
     this.addEvent("Сетка выставлена", "LONG / SHORT", price, this.cfg.levels * 2, null, "Поток цен обрабатывается сервером", ts);
   }
   openPosition(side, level, price, ts) {
-    if (this.openCount() >= MAX_OPEN_TOTAL || this.state.sides[side].positions.length >= MAX_OPEN_PER_SIDE) return false;
+    if (this.state.draining || this.openCount() >= MAX_OPEN_TOTAL || this.state.sides[side].positions.length >= MAX_OPEN_PER_SIDE) return false;
     const base = side === "long" ? Math.max(price, level.price) : Math.min(price, level.price);
     const fill = side === "long" ? base * (1 + this.cfg.slipRate) : base * (1 - this.cfg.slipRate);
     const qty = this.cfg.positionUsd / fill, notional = qty * fill;
@@ -162,6 +185,7 @@ export class PaperBot {
     return true;
   }
   processEntries(side, price, ts) {
+    if (this.state.draining) { this.state.sides[side].pending = []; return; }
     let opened = 0, skipped = 0; const remain = [];
     for (const level of this.state.sides[side].pending) {
       const hit = side === "long" ? price >= level.price : price <= level.price;
@@ -177,12 +201,25 @@ export class PaperBot {
     if (!p || !this.cfg) return 0;
     const pnl = this.positionPnl(p, price);
     arr.splice(ix, 1); this.state.realized += pnl;
+    this.state.closedNotional = (Number(this.state.closedNotional) || 0) + p.notional;
     this.state.closedPositions.unshift({
       side, entryPrice: p.entryPrice, exitPrice: price, notional: p.notional,
       qty: p.qty, pnl, closedAt: ts || Date.now(), openedAt: p.openedAt, reason
     });
     if (this.state.closedPositions.length > MAX_CLOSED) this.state.closedPositions.length = MAX_CLOSED;
     this.addEvent("Позиция закрыта", side.toUpperCase(), price, 1, pnl, reason, ts);
+    const limit = Number(this.cfg.closedVolumeLimitUsd) || 0;
+    const closedSinceLimit = Math.max(0, this.state.closedNotional - (Number(this.state.closedVolumeBaseline) || 0));
+    if (!this.state.draining && limit > 0 && closedSinceLimit >= limit) {
+      this.state.draining = true;
+      this.state.sides.long.pending = []; this.state.sides.short.pending = [];
+      this.addEvent("Лимит закрытого объёма достигнут", "—", price, 0, null,
+        "Новые входы остановлены; открытые позиции продолжают ждать свою цель", ts);
+    }
+    if (this.state.draining && this.openCount() === 0 && this.state.running) {
+      this.addEvent("PAPER завершён", "—", price, 0, null, "Все оставшиеся позиции закрыты", ts);
+      this.stopRuntime();
+    }
     return pnl;
   }
   closeAll(price, reason, ts) {
@@ -272,7 +309,7 @@ export class PaperBot {
         this.state.lastGridRefreshAt = Date.now();
         this.addEvent("Пауза завершена", "LONG / SHORT", price, this.cfg.levels * 2, null, "Сетка выставлена заново", ts);
       }
-      const blocked = Boolean(this.state.reentryUntil && ts < this.state.reentryUntil);
+      const blocked = Boolean(this.state.draining || (this.state.reentryUntil && ts < this.state.reentryUntil));
       if (this.state.running && !this.state.halted && !blocked && this.openCount() < MAX_OPEN_TOTAL &&
           this.state.sides.long.pending.length === 0 && this.state.sides.short.pending.length === 0) {
         this.placeGrid("long", price); this.placeGrid("short", price); this.state.lastGridRefreshAt = Date.now();
@@ -320,7 +357,10 @@ export class PaperBot {
       pendingLong: s.sides.long.pending.length, pendingShort: s.sides.short.pending.length,
       runtimeMs: s.runActiveMs + (s.running && s.runLastStartedAt ? Math.max(0, Date.now() - s.runLastStartedAt) : 0),
       maxDrawdown: s.maxDrawdown, halted: s.halted, haltReason: s.haltReason,
-      config: cfg ? { startBalance: cfg.startBalance, positionUsd: cfg.positionUsd, levels: cfg.levels, stepUsd: cfg.stepUsd,
+      closedNotional: Number(s.closedNotional) || 0,
+      closedVolumeProgress: Math.max(0, (Number(s.closedNotional) || 0) - (Number(s.closedVolumeBaseline) || 0)),
+      draining: Boolean(s.draining),
+      config: cfg ? { startBalance: cfg.startBalance, positionUsd: cfg.positionUsd, levels: cfg.levels, stepUsd: cfg.stepUsd, closedVolumeLimitUsd: Number(cfg.closedVolumeLimitUsd) || 0,
         feePercent: cfg.feePercent, slippagePercent: cfg.slippagePercent, profitUsd: cfg.profitUsd, stopLossUsd: cfg.stopLossUsd,
         sessionLossPct: cfg.sessionLossPct, exposurePct: cfg.exposurePct } : null,
       openPositions: ["long","short"].flatMap(side => s.sides[side].positions.map(p => ({ ...p, pnl: s.lastPrice ? this.positionPnl(p, s.lastPrice) : 0 }))).sort((a,b) => b.openedAt-a.openedAt),
