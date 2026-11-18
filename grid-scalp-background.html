@@ -41,6 +41,7 @@ footer{max-width:1120px;margin:auto;padding:4px 18px 28px;color:var(--muted);fon
 <div class="metric"><label>Открытые позиции</label><div class="value" id="openCount">0 / 80</div><small id="exposure">Экспозиция —</small></div>
 <div class="metric"><label>Время работы PAPER</label><div class="value" id="runtime">00:00:00</div><small id="runtimeDetail">Серверная сессия</small></div>
 <div class="metric"><label>Ожидающие уровни</label><div class="value" id="pendingCount">0</div><small id="pendingDetail">LONG 0 · SHORT 0</small></div>
+<div class="metric"><label>Закрытый объём по лимиту</label><div class="value" id="closedVolume">$0 / $2,000</div><small id="closedVolumeDetail">Новые входы разрешены</small></div>
 <div class="metric"><label>Максимальная просадка</label><div class="value" id="drawdown">0.00%</div><small id="ticks">Тиков: 0</small></div>
 </section>
 
@@ -54,12 +55,13 @@ footer{max-width:1120px;margin:auto;padding:4px 18px 28px;color:var(--muted);fon
 <label>Комиссия за сторону, %<input id="feeInput" type="number" min="0" step="0.01" value="0.05"></label>
 <label>Проскальзывание за сторону, %<input id="slippageInput" type="number" min="0" step="0.01" value="0.02"></label>
 <label>Цель чистой прибыли позиции, USDT<input id="profitInput" type="number" min="10" max="100" step="1" value="10"></label>
+<label>Лимит закрытого объёма, USDT<input id="closedVolumeLimitInput" type="number" min="0" step="100" value="2000"></label>
 <label>Стоп-лосс корзины, USDT<input id="stopLossInput" type="number" min="0.01" step="1" value="10"></label>
 <label>Остановка сессии при убытке, %<input id="sessionLossInput" type="number" min="0.1" step="0.1" value="2"></label>
 <label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="500" step="1" value="100"></label>
 </div>
-<p class="muted">PAPER ждёт выбранную цель чистой прибыли на каждую позицию: её можно задать от $10 до $100. Учтены комиссия и проскальзывание при входе и выходе. Если цена резко перескочит цель между тиками, итог может быть выше заданной суммы. Сервис не отправляет сделки на биржу.</p>
-<div class="actions"><div class="row"><button class="primary" id="startButton">Запустить серверный PAPER</button><button id="stopButton" disabled>Остановить</button><button class="danger" id="flattenButton">Закрыть все виртуальные позиции</button></div><button id="resetButton">Сбросить сессию</button></div>
+<p class="muted">PAPER ждёт выбранную цель чистой прибыли на каждую позицию: её можно задать от $10 до $100. Учтены комиссия и проскальзывание при входе и выходе. Если цена резко перескочит цель между тиками, итог может быть выше заданной суммы. Лимит закрытого объёма считает сумму номиналов закрытых позиций; после его достижения новые входы и ожидающие уровни прекращаются, а уже открытые позиции продолжают работать до своих целей. Значение 0 выключает лимит. Стоп-лоссы корзины и сессии сохраняются. Сервис не отправляет сделки на биржу.</p>
+<div class="actions"><div class="row"><button class="primary" id="startButton">Запустить серверный PAPER</button><button id="stopButton" disabled>Остановить</button><button class="danger" id="flattenButton">Закрыть все виртуальные позиции</button></div><div class="row"><button id="applyClosedVolumeLimit">Применить лимит закрытого объёма</button><button id="resetButton">Сбросить сессию</button></div></div>
 <div id="error" class="muted" style="margin-top:10px"></div>
 </section>
 
@@ -92,7 +94,7 @@ function priceText(x){return Number(x)>0?new Intl.NumberFormat("en-US",{minimumF
 function timeText(ms){return ms?new Date(ms).toLocaleTimeString("ru-RU",{hour12:false}):"—";}
 function duration(ms){var sec=Math.floor(Math.max(0,ms)/1000),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),ss=sec%60;return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+String(ss).padStart(2,"0");}
 function val(id){return Number($(id).value);}
-function config(){return {startBalance:val("balanceInput"),positionUsd:val("positionUsdInput"),levels:val("levelsInput"),stepUsd:val("stepInput"),feePercent:val("feeInput"),slippagePercent:val("slippageInput"),profitUsd:val("profitInput"),stopLossUsd:val("stopLossInput"),sessionLossPct:val("sessionLossInput"),exposurePct:val("exposureInput")};}
+function config(){return {startBalance:val("balanceInput"),positionUsd:val("positionUsdInput"),levels:val("levelsInput"),stepUsd:val("stepInput"),feePercent:val("feeInput"),slippagePercent:val("slippageInput"),profitUsd:val("profitInput"),stopLossUsd:val("stopLossInput"),sessionLossPct:val("sessionLossInput"),exposurePct:val("exposureInput"),closedVolumeLimitUsd:val("closedVolumeLimitInput")};}
 async function call(path,method,body){
 var response=await fetch(API+encodeURIComponent(SID)+path,{method:method||"GET",headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,cache:"no-store"});
 var data=await response.json().catch(function(){return {error:"Сервер вернул некорректный ответ"};});
@@ -112,9 +114,13 @@ $("openCount").textContent=s.openCount+" / 80";$("exposure").textContent="Экс
 $("runtime").textContent=duration(s.runtimeMs);$("runtimeDetail").textContent=s.running?"PAPER сейчас работает на сервере":"Накопленное время PAPER";
 $("pendingCount").textContent=s.pendingCount;$("pendingDetail").textContent="LONG "+s.pendingLong+" · SHORT "+s.pendingShort;
 $("drawdown").textContent=(Number(s.maxDrawdown)||0).toFixed(2)+"%";$("ticks").textContent="Тиков: "+s.tickCount;
+var closedLimit=Number(s.config&&s.config.closedVolumeLimitUsd)||0, closedProgress=Number(s.closedVolumeProgress)||0;
+$("closedVolume").textContent=money(closedProgress)+" / "+(closedLimit?money(closedLimit):"выкл.");
+$("closedVolumeDetail").textContent=s.draining?(s.openCount?"Лимит достигнут · ждём цели открытых позиций":"Лимит достигнут · позиции закрыты"):closedLimit?"Считается с момента применения лимита":"Лимит выключен";
 $("startButton").disabled=s.running||s.halted||initialized;$("stopButton").disabled=!s.running;
 $("flattenButton").disabled=!s.openCount;
 $("resetButton").disabled=s.running;
+$("applyClosedVolumeLimit").disabled=!initialized;
 ["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=initialized;});
 if(s.config&&!s.running)fillConfig(s.config);
 renderOpen(s.openPositions||[]);renderClosed(s.closedPositions||[]);renderEvents(s.events||[]);
@@ -123,6 +129,7 @@ function fillConfig(c){
 $("balanceInput").value=c.startBalance;$("positionUsdInput").value=c.positionUsd;$("levelsInput").value=c.levels;$("stepInput").value=c.stepUsd;
 $("feeInput").value=c.feePercent;$("slippageInput").value=c.slippagePercent;$("profitInput").value=c.profitUsd;$("stopLossInput").value=c.stopLossUsd;
 $("sessionLossInput").value=c.sessionLossPct;$("exposureInput").value=c.exposurePct;
+if(c.closedVolumeLimitUsd!=null)$("closedVolumeLimitInput").value=c.closedVolumeLimitUsd;
 }
 function renderOpen(rows){
 $("openTableCount").textContent=rows.length+" позиций";
@@ -156,6 +163,11 @@ try{setError("");await call("/start","POST",{config:config()});await poll();}
 catch(e){setError(e.message);}
 });
 $("stopButton").addEventListener("click",async function(){try{await call("/stop","POST",{});await poll();}catch(e){setError(e.message);}});
+$("applyClosedVolumeLimit").addEventListener("click",async function(){
+try{var limit=val("closedVolumeLimitInput");if(!Number.isFinite(limit)||limit<0)throw new Error("Укажите 0 или положительную сумму USDT.");
+await call("/closed-volume-limit","POST",{limitUsd:limit});await poll();setError("Лимит применён. Отсчёт начинается с этого момента; открытые позиции сохранены.");}
+catch(e){setError(e.message);}
+});
 $("flattenButton").addEventListener("click",async function(){if(!confirm("Закрыть все виртуальные позиции по текущей цене?"))return;try{await call("/flatten","POST",{});await poll();}catch(e){setError(e.message);}});
 $("resetButton").addEventListener("click",async function(){if(!confirm("Сбросить серверную PAPER-сессию и удалить её историю?"))return;try{await call("/reset","POST",{startBalance:val("balanceInput")});$("profitInput").value=Math.max(10,Math.min(100,Number($("profitInput").value)||10));await poll();}catch(e){setError(e.message);}});
 $("openRows").addEventListener("click",async function(e){var id=e.target&&e.target.getAttribute("data-close");if(!id)return;try{await call("/close/"+id,"POST",{});await poll();}catch(err){setError(err.message);}});
