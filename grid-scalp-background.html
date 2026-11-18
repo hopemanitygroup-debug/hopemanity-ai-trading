@@ -103,7 +103,7 @@ if(!response.ok)throw new Error(data.error||("HTTP "+response.status));return da
 function setError(text){$("error").textContent=text||"";}
 function render(s){
 latest=s;running=Boolean(s.running);initialized=Boolean(s.config);
-$("status").textContent=s.running?(s.connected?"PAPER работает на сервере":"Сервер переподключает поток"):s.halted?"PAPER остановлен по лимиту убытка":s.config?"Сессия сохранена · остановлена":"Не запущен";
+$("status").textContent=s.draining?(s.openCount?"Лимит достигнут · ждём цели позиций":"Лимит закрытого объёма выполнен"):s.running?(s.connected?"PAPER работает на сервере":"Сервер переподключает поток"):s.halted?"PAPER остановлен по лимиту убытка":s.config?"Сессия сохранена · остановлена":"Не запущен";
 $("statusDot").className="dot"+(s.running&&s.connected?" good":s.halted?" bad":"");
 $("price").textContent=s.price?priceText(s.price):"—";
 $("feedInfo").textContent=s.connected?"Поток Binance подключён · тиков: "+s.tickCount:(s.feedError||"Ожидание потока");
