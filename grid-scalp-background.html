@@ -94,7 +94,7 @@ function priceText(x){return Number(x)>0?new Intl.NumberFormat("en-US",{minimumF
 function timeText(ms){return ms?new Date(ms).toLocaleTimeString("ru-RU",{hour12:false}):"—";}
 function duration(ms){var sec=Math.floor(Math.max(0,ms)/1000),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),ss=sec%60;return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+String(ss).padStart(2,"0");}
 function val(id){return Number($(id).value);}
-function config(){return {startBalance:val("balanceInput"),positionUsd:val("positionUsdInput"),levels:val("levelsInput"),stepUsd:val("stepInput"),feePercent:val("feeInput"),slippagePercent:val("slippageInput"),profitUsd:val("profitInput"),stopLossUsd:val("stopLossInput"),sessionLossPct:val("sessionLossInput"),exposurePct:val("exposureInput"),closedVolumeLimitUsd:val("closedVolumeLimitInput")};}
+function config(){return {startBalance:val("balanceInput"),positionUsd:val("positionUsdInput"),levels:val("levelsInput"),stepUsd:val("stepInput"),feePercent:val("feeInput"),slippagePercent:val("slippageInput"),profitUsd:val("profitInput"),stopLossUsd:val("stopLossInput"),sessionLossPct:val("sessionLossInput"),exposurePct:val("exposureInput"),profitGoalUsd:val("profitGoalInput")};}
 async function call(path,method,body){
 var response=await fetch(API+encodeURIComponent(SID)+path,{method:method||"GET",headers:body?{"Content-Type":"application/json"}:{},body:body?JSON.stringify(body):undefined,cache:"no-store"});
 var data=await response.json().catch(function(){return {error:"Сервер вернул некорректный ответ"};});
