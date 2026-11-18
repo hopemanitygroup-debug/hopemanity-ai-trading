@@ -61,7 +61,7 @@ footer{max-width:1120px;margin:auto;padding:4px 18px 28px;color:var(--muted);fon
 <label>Предел открытой экспозиции, % баланса<input id="exposureInput" type="number" min="1" max="500" step="1" value="100"></label>
 </div>
 <p class="muted">PAPER ждёт выбранную цель чистой прибыли на каждую позицию: её можно задать от $1 до $100. Учтены комиссия и проскальзывание при входе и выходе. Если цена резко перескочит цель между тиками, итог может быть выше заданной суммы. Цель чистого заработка считает реализованный P&amp;L закрытых позиций после комиссии и проскальзывания; после её достижения новые входы и ожидающие уровни прекращаются, а уже открытые позиции продолжают работать до своих целей. Значение 0 выключает цель. Стоп-лоссы корзины и сессии сохраняются. Сервис не отправляет сделки на биржу.</p>
-<div class="actions"><div class="row"><button class="primary" id="startButton">Запустить серверный PAPER</button><button id="stopButton" disabled>Остановить</button><button class="danger" id="flattenButton">Закрыть все виртуальные позиции</button></div><div class="row"><button id="applyPositionProfit">Применить цель позиции</button><button id="applyClosedVolumeLimit">Применить цель заработка</button><button id="resetButton">Сбросить сессию</button></div></div>
+<div class="actions"><div class="row"><button class="primary" id="startButton">Запустить серверный PAPER</button><button id="stopButton" disabled>Остановить</button><button class="danger" id="flattenButton">Закрыть все виртуальные позиции</button></div><div class="row"><button id="saveConfigButton">Сохранить настройки PAPER</button><button id="applyPositionProfit">Применить цель позиции</button><button id="applyClosedVolumeLimit">Применить цель заработка</button><button id="resetButton">Сбросить сессию</button></div></div>
 <div id="error" class="muted" style="margin-top:10px"></div>
 </section>
 
@@ -121,7 +121,7 @@ $("startButton").disabled=s.running||s.halted||Boolean(s.draining);$("startButto
 $("flattenButton").disabled=!s.openCount;
 $("resetButton").disabled=s.running;
 $("applyClosedVolumeLimit").disabled=!initialized;$("applyPositionProfit").disabled=!initialized;
-["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput"].forEach(function(id){$(id).disabled=initialized;});
+["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput","profitGoalInput"].forEach(function(id){$(id).disabled=running;});$("saveConfigButton").disabled=running;
 if(s.config&&!s.running)fillConfig(s.config);
 renderOpen(s.openPositions||[]);renderClosed(s.closedPositions||[]);renderEvents(s.events||[]);
 }
@@ -158,6 +158,7 @@ var map={balanceInput:"balanceInput",positionUsdInput:"positionUsdInput",levelsI
 Object.keys(map).forEach(function(id){if(saved.settings[id]!=null)$(id).value=saved.settings[id];});
 }catch(e){}
 }
+$("saveConfigButton").addEventListener("click",async function(){try{await call("/config","POST",{config:config()});await poll();setError("Настройки сохранены. История и открытые позиции сохранены.");}catch(e){setError(e.message);}});
 $("startButton").addEventListener("click",async function(){
 try{setError("");await call("/start","POST",{config:config()});await poll();}
 catch(e){setError(e.message);}
