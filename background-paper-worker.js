@@ -77,7 +77,7 @@ export class PaperBot {
     if (method === "POST" && url.pathname === "/start") {
       const body = await request.json();
       if (this.state.halted) return this.json({ error: "Сессия остановлена по лимиту убытка. Сбросьте PAPER перед новым запуском." }, 409);
-      if (this.state.draining && this.openCount() === 0) return this.json({ error: "Лимит закрытого объёма уже завершил эту сессию. Примените новый лимит или сбросьте PAPER." }, 409);
+      if (this.state.draining && this.openCount() === 0) return this.json({ error: "Цель заработка уже достигнута. Примените новую цель перед продолжением." }, 409);
       if (!this.state.initialized) {
         try { this.cfg = cleanConfig(body.config || {}); } catch (e) { return this.json({ error: e.message }, 400); }
         this.state = blankState(this.cfg.startBalance);
@@ -297,7 +297,7 @@ export class PaperBot {
     if (!this.state.initialized) {
       this.initializeGrid(price, ts);
     } else if (this.state.running && !this.state.halted) {
-      if (this.openCount() && this.floating() <= -this.cfg.stopLossUsd) {
+      if (!this.state.draining && this.openCount() && this.floating() <= -this.cfg.stopLossUsd) {
         this.closeAll(price, "Стоп-лосс корзины", ts);
         this.state.reentryUntil = ts + 60000;
         this.addEvent("Пауза после стоп-лосса", "—", price, 0, null, "Повторный вход приостановлен на 60 секунд", ts);
@@ -332,7 +332,7 @@ export class PaperBot {
         this.placeGrid("long", price); this.placeGrid("short", price);
         this.state.lastGridRefreshAt = now;
       }
-      if (this.state.running && !this.state.halted &&
+      if (this.state.running && !this.state.halted && !this.state.draining &&
           this.state.realized + this.floating() <= -this.state.startBalance * this.cfg.sessionLossPct / 100) {
         this.closeAll(price, "Остановка по лимиту сессии", ts);
         this.state.halted = true; this.state.haltReason = "Достигнут лимит убытка сессии";
