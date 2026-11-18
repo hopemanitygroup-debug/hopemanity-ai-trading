@@ -209,7 +209,7 @@ export class PaperBot {
     await this.loading;
     if (!this.state.running || (this.feed && this.feed.readyState === 1)) return;
     try {
-      const response = await fetch("https://stream.binance.com:9443/ws/btcusdt@trade", { headers: { Upgrade: "websocket" } });
+      const response = await fetch("https://data-stream.binance.vision/ws/btcusdt@trade", { headers: { Upgrade: "websocket" } });
       if (!response.webSocket) throw new Error("Binance WebSocket handshake failed: " + response.status);
       const ws = response.webSocket;
       ws.accept();
