@@ -24,7 +24,7 @@ label{display:block;color:var(--muted);font-size:13px}input{display:block;width:
 input:disabled{opacity:.65}select{display:block;width:100%;margin-top:6px;padding:12px;border:1px solid var(--line);border-radius:11px;background:#091810;color:#e8fff2;font:inherit}button{padding:11px 14px;border:1px solid var(--line);border-radius:11px;background:#142b21;color:#e8fff2;font:inherit;cursor:pointer}
 button.primary{background:#24533c;border-color:#438161;font-weight:700}button.danger{border-color:#7d4149;color:#ffb1b5}button:disabled{opacity:.45;cursor:not-allowed}
 .actions,.row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.actions{margin-top:14px}
-.scroll{overflow:auto;border:1px solid var(--line);border-radius:12px}table{width:100%;border-collapse:collapse;min-width:690px}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #254535;white-space:nowrap}th{color:var(--muted);font-weight:600}tr:last-child td{border-bottom:0}.empty{text-align:center;color:var(--muted);padding:18px}
+.position-list{display:grid;gap:12px}.position-card{border:1px solid #35414d;border-radius:16px;padding:16px;background:#18212b}.position-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:14px}.side-badge{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:6px;font-weight:800}.side-badge.long{background:#22bd8b;color:#08261d}.side-badge.short{background:#ed6475;color:#310b12}.position-symbol{font-size:20px;font-weight:700}.position-tag{padding:3px 8px;border:1px solid #44505d;border-radius:6px;color:#c3cbd4;font-size:13px}.position-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px 16px}.position-field{min-width:0}.position-field label{margin-bottom:4px}.position-field strong{font-size:17px;font-weight:550;overflow-wrap:anywhere}.position-pnl{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin:6px 0 14px}.position-pnl strong{font-size:26px}.position-actions{display:flex;gap:8px;margin-top:14px}.position-actions button{flex:1;background:#303a47;border-color:#303a47}@media(max-width:560px){.position-card{padding:13px}.position-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.position-symbol{font-size:18px}.position-pnl strong{font-size:23px}}.scroll{overflow:auto;border:1px solid var(--line);border-radius:12px}table{width:100%;border-collapse:collapse;min-width:690px}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #254535;white-space:nowrap}th{color:var(--muted);font-weight:600}tr:last-child td{border-bottom:0}.empty{text-align:center;color:var(--muted);padding:18px}
 footer{max-width:1120px;margin:auto;padding:4px 18px 28px;color:var(--muted);font-size:12px;line-height:1.5}
 @media(max-width:560px){main{padding:12px}.card{padding:13px}.controls{gap:10px}h1{font-size:19px}.value{font-size:20px}input{padding:10px;font-size:14px}button{padding:10px;font-size:14px}}
 </style>
@@ -68,7 +68,8 @@ footer{max-width:1120px;margin:auto;padding:4px 18px 28px;color:var(--muted);fon
 
 <section class="card">
 <div class="row"><h2>Открытые позиции</h2><span class="muted" id="openTableCount">0 позиций</span></div>
-<div class="scroll"><table><thead><tr><th>Сторона</th><th>Вход</th><th>Сумма</th><th>Объём BTC</th><th>Чистый P&amp;L сейчас</th><th>Открыта</th><th>Действие</th></tr></thead><tbody id="openRows"><tr><td colspan="7" class="empty">Открытых позиций нет.</td></tr></tbody></table></div>
+<p class="muted">Карточки показывают виртуальные сделки PAPER. Плечо и ликвидация не моделируются; реальных ордеров нет.</p>
+<div class="position-list" id="openCards"><div class="empty">Открытых позиций нет.</div></div>
 </section>
 <section class="card">
 <div class="row"><h2>Закрытые позиции</h2><span class="muted" id="closedTableCount">0 позиций</span></div>
@@ -124,7 +125,7 @@ $("resetButton").disabled=s.running;
 $("applyClosedVolumeLimit").disabled=!initialized;$("applyPositionProfit").disabled=!initialized;
 ["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","stopLossInput","sessionLossInput","exposureInput","profitGoalInput"].forEach(function(id){$(id).disabled=running;});$("saveConfigButton").disabled=running;
 if(s.config&&!s.running&&!configDirty)fillConfig(s.config);
-renderOpen(s.openPositions||[]);renderClosed(s.closedPositions||[]);renderEvents(s.events||[]);
+renderOpen(s.openPositions||[],s.price,s.config);renderClosed(s.closedPositions||[]);renderEvents(s.events||[]);
 }
 function fillConfig(c){
 $("balanceInput").value=c.startBalance;$("positionUsdInput").value=c.positionUsd;$("levelsInput").value=c.levels;$("stepInput").value=c.stepUsd;
@@ -132,10 +133,25 @@ $("feeInput").value=c.feePercent;$("slippageInput").value=c.slippagePercent;$("p
 $("sessionLossInput").value=c.sessionLossPct;$("exposureInput").value=c.exposurePct;
 if(c.profitGoalUsd!=null)$("profitGoalInput").value=c.profitGoalUsd;$("directionMode").value=c.directionMode||"both";
 }
-function renderOpen(rows){
+function renderOpen(rows,mark,cfg){
 $("openTableCount").textContent=rows.length+" позиций";
-if(!rows.length){$("openRows").innerHTML='<tr><td colspan="7" class="empty">Открытых позиций нет.</td></tr>';return;}
-$("openRows").innerHTML=rows.map(function(p){return '<tr><td class="'+(p.side==="long"?"positive":"negative")+'">'+p.side.toUpperCase()+'</td><td>'+priceText(p.entryPrice)+'</td><td>'+money(p.notional)+'</td><td>'+Number(p.qty).toFixed(6)+'</td><td class="'+(p.pnl>=0?"positive":"negative")+'">'+money(p.pnl)+'</td><td>'+timeText(p.openedAt)+'</td><td><button data-close="'+p.id+'">Закрыть</button></td></tr>';}).join("");
+if(!rows.length){$("openCards").innerHTML='<div class="empty">Открытых позиций нет.</div>';return;}
+var target=Number(cfg&&cfg.profitUsd)||0;
+$("openCards").innerHTML=rows.map(function(p){
+var isLong=p.side==="long", pnl=Number(p.pnl)||0;
+return '<article class="position-card">'+
+'<div class="position-head"><span class="side-badge '+(isLong?"long":"short")+'">'+(isLong?"L":"S")+'</span><span class="position-symbol">BTCUSDT</span><span class="position-tag">PAPER</span><span class="position-tag">'+(isLong?"LONG":"SHORT")+'</span></div>'+
+'<div class="position-pnl"><div><label>Чистый P&amp;L (USDT)</label><strong class="'+(pnl>=0?"positive":"negative")+'">'+money(pnl)+'</strong></div><div style="text-align:right"><label>ROI от суммы позиции</label><strong class="'+(pnl>=0?"positive":"negative")+'">'+(Number(p.notional)>0?(pnl/Number(p.notional)*100).toFixed(2):"0.00")+'%</strong></div></div>'+
+'<div class="position-grid">'+
+'<div class="position-field"><label>Сумма позиции</label><strong>'+money(p.notional)+'</strong></div>'+
+'<div class="position-field"><label>Объём BTC</label><strong>'+Number(p.qty).toFixed(6)+'</strong></div>'+
+'<div class="position-field"><label>Цена входа</label><strong>'+priceText(p.entryPrice)+'</strong></div>'+
+'<div class="position-field"><label>Цена маркировки</label><strong>'+priceText(mark)+'</strong></div>'+
+'<div class="position-field"><label>Цель чистой прибыли</label><strong class="positive">'+(target?money(target):"не задана")+'</strong></div>'+
+'<div class="position-field"><label>Стоп / плечо</label><strong>общий стоп · без плеча</strong></div>'+
+'</div><div class="muted" style="margin-top:10px">Открыта: '+timeText(p.openedAt)+' · Маржа и цена ликвидации в PAPER не рассчитываются.</div>'+
+'<div class="position-actions"><button data-close="'+p.id+'">Закрыть эту позицию</button></div></article>';
+}).join("");
 }
 function renderClosed(rows){
 $("closedTableCount").textContent=rows.length+" позиций";
