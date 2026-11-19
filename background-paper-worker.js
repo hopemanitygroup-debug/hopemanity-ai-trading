@@ -41,6 +41,7 @@ export class PaperBot {
     this.cfg = null;
     this.orderId = 0;
     this.feed = null;
+    this.feedConnectedAt = 0;
     this.queue = Promise.resolve();
     this.loading = this.load();
   }
@@ -298,7 +299,7 @@ export class PaperBot {
       if (!response.webSocket) throw new Error("Binance WebSocket handshake failed: " + response.status);
       const ws = response.webSocket;
       ws.accept();
-      this.feed = ws; this.state.connected = true; this.state.feedError = "";
+      this.feed = ws; this.feedConnectedAt = Date.now(); this.state.connected = true; this.state.feedError = "";
       ws.addEventListener("message", event => {
         this.queue = this.queue.then(() => this.handleTrade(event.data)).catch(() => {});
       });
@@ -312,7 +313,7 @@ export class PaperBot {
         this.state.connected = false; this.state.feedError = "Ошибка потока Binance";
         if (this.state.running) this.ensureAlarm(5000);
       });
-      this.ensureAlarm(23 * 60 * 60 * 1000);
+      this.ensureAlarm(15000);
       await this.persist();
     } catch (error) {
       this.state.connected = false; this.state.feedError = String(error && error.message || error);
@@ -323,10 +324,17 @@ export class PaperBot {
   async alarm() {
     await this.loading;
     if (!this.state.running) return;
-    if (this.feed && this.feed.readyState === 1 && this.state.connected) {
-      this.ensureAlarm(23 * 60 * 60 * 1000);
+    const lastActivity = Number(this.state.lastTradeTime) || this.feedConnectedAt || Date.now();
+    const feedIsFresh = this.feed && this.feed.readyState === 1 && this.state.connected &&
+      Date.now() - lastActivity < 30000;
+    if (feedIsFresh) {
+      this.ensureAlarm(15000);
       return;
     }
+    if (this.feed) this.closeFeed();
+    this.state.connected = false;
+    this.state.feedError = "Нет новых тиков 30 секунд; переподключение к Binance";
+    await this.persist();
     await this.connectFeed();
   }
   async handleTrade(raw) {
