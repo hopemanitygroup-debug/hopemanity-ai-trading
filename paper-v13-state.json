@@ -1,13 +1,13 @@
 {
-  "last": 1795377600000,
+  "last": 1795464000000,
   "position": null,
   "realized_pnl": 0.0,
   "fees": 0.0,
   "events": [],
-  "last_check": "2026-11-23T20:16:06.238612+00:00",
+  "last_check": "2026-11-24T19:31:15.776254+00:00",
   "status": "WAIT",
   "data_source": "Binance official USD-M futures daily/monthly archive (delayed)",
   "data_delay_warning": "Daily archives are published next day; not live execution",
-  "last_price": 61236.9,
-  "last_candle": 1795377600000
+  "last_price": 61239.9,
+  "last_candle": 1795464000000
 }
