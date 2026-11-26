@@ -106,6 +106,8 @@ footer{max-width:1180px;padding:8px 20px 30px;color:#8395a9}
 
 /* Main navigation: one focused screen at a time */
 .screen-nav{position:sticky;top:0;z-index:2;display:flex;gap:7px;overflow-x:auto;padding:8px;margin:0 0 14px;border:1px solid #293a49;border-radius:15px;background:rgba(10,17,25,.94);backdrop-filter:blur(14px)}.screen-tab{flex:0 0 auto;padding:9px 13px;border:1px solid transparent;background:transparent;color:#a9bacb;font-size:13px}.screen-tab.active{background:#1b342f;border-color:#3b8068;color:#eafff5}.screen-tab b{display:inline-grid;place-items:center;min-width:20px;height:20px;margin-left:4px;padding:0 5px;border-radius:99px;background:#29483e;color:#75e2b6;font-size:11px}.screen-section{display:none}.screen-section.active{display:grid}.screen-section.card.active{display:block}
+
+.open-pager{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:14px}.open-pager span{color:#a7b8c9;font-size:12px;text-align:center}.open-pager button{padding:8px 12px;font-size:12px}.open-pager button:disabled{opacity:.35;cursor:not-allowed}@media(max-width:560px){.open-pager{justify-content:space-between;gap:6px}.open-pager span{font-size:11px}.open-pager button{min-width:72px}}
 </style>
 </head>
 <body>
@@ -150,6 +152,7 @@ footer{max-width:1180px;padding:8px 20px 30px;color:#8395a9}
 <div class="row"><h2>Открытые позиции</h2><span class="muted" id="openTableCount">0 позиций</span></div>
 <p class="muted">Все открытые виртуальные позиции показаны строками; кнопку «Закрыть» можно нажать у нужной позиции.</p>
 <div class="position-list" id="openCards"><div class="empty">Открытых позиций нет.</div></div>
+<div class="open-pager" id="openPager"></div>
 </section>
 <section class="card screen-section" data-screen="closed">
 <div class="row"><h2>Закрытые позиции</h2><span class="muted" id="closedTableCount">0 позиций</span></div>
@@ -169,7 +172,7 @@ var SID_KEY="hopemanity_paper_background_session_id";
 var SID=localStorage.getItem(SID_KEY);
 if(!SID){SID=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random().toString(36).slice(2));localStorage.setItem(SID_KEY,SID);}
 var SESSION_KEY="hopemanity_csv_stop_grid_session_v8";
-var running=false, initialized=false, latest=null, timer=null, configDirty=false;
+var running=false, initialized=false, latest=null, timer=null, configDirty=false, openPage=0, openPageSize=10;
 var $=function(id){return document.getElementById(id);};
 function money(x){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:2}).format(Number(x)||0);}
 function priceText(x){return Number(x)>0?new Intl.NumberFormat("en-US",{minimumFractionDigits:2,maximumFractionDigits:2}).format(x):"—";}
@@ -216,9 +219,12 @@ if(c.profitGoalUsd!=null)$("profitGoalInput").value=c.profitGoalUsd;$("direction
 }
 function renderOpen(rows,mark,cfg){
 $("openTableCount").textContent=rows.length+" позиций";
-if(!rows.length){$("openCards").innerHTML='<div class="empty">Открытых позиций нет.</div>';return;}
+var totalPages=Math.max(1,Math.ceil(rows.length/openPageSize));
+openPage=Math.min(openPage,totalPages-1);
+if(!rows.length){$("openCards").innerHTML='<div class="empty">Открытых позиций нет.</div>'; $("openPager").innerHTML=""; return;}
+var pageRows=rows.slice(openPage*openPageSize,(openPage+1)*openPageSize);
 $("openCards").innerHTML='<div class="open-list-head"><span>Сторона</span><span>Сумма</span><span>Вход</span><span>Текущая цена</span><span>Объём BTC</span><span>P&amp;L</span><span></span></div>'+
-rows.map(function(p){
+pageRows.map(function(p){
 var isLong=p.side==="long",pnl=Number(p.pnl)||0;
 return '<div class="open-list-row">'+
 '<span class="open-direction '+(isLong?"long":"short")+'">'+(isLong?"LONG":"SHORT")+'</span>'+
@@ -230,6 +236,7 @@ return '<div class="open-list-row">'+
 '<button class="open-close" data-close="'+p.id+'" aria-label="Закрыть позицию '+p.id+'">Закрыть</button>'+
 '</div>';
 }).join("");
+$("openPager").innerHTML='<button data-page="prev" '+(openPage===0?"disabled":"")+'>Назад</button><span>Страница '+(openPage+1)+' из '+totalPages+' · показано '+pageRows.length+' из '+rows.length+'</span><button data-page="next" '+(openPage>=totalPages-1?"disabled":"")+'>Дальше</button>';
 }
 function renderClosed(rows){
 $("closedTableCount").textContent=rows.length+" позиций";
@@ -267,6 +274,7 @@ catch(e){setError(e.message);}
 });
 $("flattenButton").addEventListener("click",async function(){if(!confirm("Закрыть все виртуальные позиции по текущей цене?"))return;try{await call("/flatten","POST",{});await poll();}catch(e){setError(e.message);}});
 $("resetButton").addEventListener("click",async function(){if(!confirm("Сбросить серверную PAPER-сессию и удалить её историю?"))return;try{await call("/reset","POST",{startBalance:val("balanceInput")});$("profitInput").value=Math.max(1,Math.min(100,Number($("profitInput").value)||1));configDirty=false;await poll();}catch(e){setError(e.message);}});
+$("openPager").addEventListener("click",function(e){var action=e.target&&e.target.getAttribute("data-page");if(action==="prev"&&openPage>0)openPage--;if(action==="next")openPage++;if(latest)renderOpen(latest.openPositions||[],latest.price,latest.config);});
 $("openCards").addEventListener("click",async function(e){var button=e.target.closest("[data-close]");var id=button&&button.getAttribute("data-close");if(!id)return;try{await call("/close/"+encodeURIComponent(id),"POST",{});await poll();}catch(err){setError(err.message);}});
 ["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","profitGoalInput","stopLossInput","sessionLossInput","exposureInput","directionMode"].forEach(function(id){$(id).addEventListener("input",function(){configDirty=true;});});
 importPreviousSettings();
