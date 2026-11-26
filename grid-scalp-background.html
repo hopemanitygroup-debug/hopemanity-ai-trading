@@ -189,7 +189,7 @@ catch(e){setError(e.message);}
 });
 $("flattenButton").addEventListener("click",async function(){if(!confirm("Закрыть все виртуальные позиции по текущей цене?"))return;try{await call("/flatten","POST",{});await poll();}catch(e){setError(e.message);}});
 $("resetButton").addEventListener("click",async function(){if(!confirm("Сбросить серверную PAPER-сессию и удалить её историю?"))return;try{await call("/reset","POST",{startBalance:val("balanceInput")});$("profitInput").value=Math.max(1,Math.min(100,Number($("profitInput").value)||1));configDirty=false;await poll();}catch(e){setError(e.message);}});
-$("openRows").addEventListener("click",async function(e){var id=e.target&&e.target.getAttribute("data-close");if(!id)return;try{await call("/close/"+id,"POST",{});await poll();}catch(err){setError(err.message);}});
+$("openCards").addEventListener("click",async function(e){var button=e.target.closest("[data-close]");var id=button&&button.getAttribute("data-close");if(!id)return;try{await call("/close/"+encodeURIComponent(id),"POST",{});await poll();}catch(err){setError(err.message);}});
 ["balanceInput","positionUsdInput","levelsInput","stepInput","feeInput","slippageInput","profitInput","profitGoalInput","stopLossInput","sessionLossInput","exposureInput","directionMode"].forEach(function(id){$(id).addEventListener("input",function(){configDirty=true;});});
 importPreviousSettings();
 poll();timer=setInterval(poll,1200);
