@@ -97,6 +97,9 @@ footer{max-width:1180px;padding:8px 20px 30px;color:#8395a9}
  .position-grid{grid-template-columns:1fr 1fr}
 }
 
+
+/* Compact position list for high-volume sessions */
+#openCards{display:grid;gap:8px}.compact-position{overflow:hidden;border:1px solid #304253;border-radius:13px;background:linear-gradient(110deg,#131f2b,#101923)}.compact-position summary{display:grid;grid-template-columns:76px 1fr 1fr 86px 18px;align-items:center;gap:9px;min-height:58px;padding:10px 12px;cursor:pointer;list-style:none}.compact-position summary::-webkit-details-marker{display:none}.compact-side{font-size:11px;font-weight:800;letter-spacing:.04em}.compact-side.long{color:#48e0ad}.compact-side.short{color:#ff8291}.compact-size,.compact-entry,.compact-pnl{font-weight:650;font-variant-numeric:tabular-nums}.compact-entry{color:#aebdca;font-size:13px}.compact-toggle{color:#8fa2b4;transition:transform .15s}.compact-position[open] .compact-toggle{transform:rotate(180deg)}.compact-details{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:12px;border-top:1px solid #293a49}.compact-details div{min-width:0}.compact-details small{display:block;font-size:10px;color:#95a8bb}.compact-details strong{display:block;margin-top:3px;font-size:13px;overflow-wrap:anywhere}.compact-close{width:100%;margin:0 12px 12px;width:calc(100% - 24px);background:#253342;border-color:#3a4e60}.compact-position summary:focus-visible{outline:2px solid #48e0ad;outline-offset:-2px}@media(max-width:560px){.compact-position summary{grid-template-columns:57px 1fr 1fr 70px 12px;gap:6px;padding:9px 10px;min-height:54px}.compact-size,.compact-pnl{font-size:13px}.compact-entry{font-size:11px}.compact-details{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
 </style>
 </head>
 <body>
@@ -208,19 +211,11 @@ $("openTableCount").textContent=rows.length+" позиций";
 if(!rows.length){$("openCards").innerHTML='<div class="empty">Открытых позиций нет.</div>';return;}
 var target=Number(cfg&&cfg.profitUsd)||0;
 $("openCards").innerHTML=rows.map(function(p){
-var isLong=p.side==="long", pnl=Number(p.pnl)||0;
-return '<article class="position-card">'+
-'<div class="position-head"><span class="side-badge '+(isLong?"long":"short")+'">'+(isLong?"L":"S")+'</span><span class="position-symbol">BTCUSDT</span><span class="position-tag">PAPER</span><span class="position-tag">'+(isLong?"LONG":"SHORT")+'</span></div>'+
-'<div class="position-pnl"><div><label>Чистый P&amp;L (USDT)</label><strong class="'+(pnl>=0?"positive":"negative")+'">'+money(pnl)+'</strong></div><div style="text-align:right"><label>ROI от суммы позиции</label><strong class="'+(pnl>=0?"positive":"negative")+'">'+(Number(p.notional)>0?(pnl/Number(p.notional)*100).toFixed(2):"0.00")+'%</strong></div></div>'+
-'<div class="position-grid">'+
-'<div class="position-field"><label>Сумма позиции</label><strong>'+money(p.notional)+'</strong></div>'+
-'<div class="position-field"><label>Объём BTC</label><strong>'+Number(p.qty).toFixed(6)+'</strong></div>'+
-'<div class="position-field"><label>Цена входа</label><strong>'+priceText(p.entryPrice)+'</strong></div>'+
-'<div class="position-field"><label>Цена маркировки</label><strong>'+priceText(mark)+'</strong></div>'+
-'<div class="position-field"><label>Цель чистой прибыли</label><strong class="positive">'+(target?money(target):"не задана")+'</strong></div>'+
-'<div class="position-field"><label>Стоп / плечо</label><strong>общий стоп · без плеча</strong></div>'+
-'</div><div class="muted" style="margin-top:10px">Открыта: '+timeText(p.openedAt)+' · Маржа и цена ликвидации в PAPER не рассчитываются.</div>'+
-'<div class="position-actions"><button data-close="'+p.id+'">Закрыть эту позицию</button></div></article>';
+var isLong=p.side==="long", pnl=Number(p.pnl)||0, roi=Number(p.notional)>0?(pnl/Number(p.notional)*100).toFixed(2):"0.00";
+return '<details class="compact-position">'+
+'<summary><span class="compact-side '+(isLong?"long":"short")+'">'+(isLong?"LONG":"SHORT")+'</span><span class="compact-size">'+money(p.notional)+'</span><span class="compact-entry">'+priceText(p.entryPrice)+'</span><span class="compact-pnl '+(pnl>=0?"positive":"negative")+'">'+money(pnl)+'</span><span class="compact-toggle">⌄</span></summary>'+
+'<div class="compact-details"><div><small>Объём BTC</small><strong>'+Number(p.qty).toFixed(6)+'</strong></div><div><small>Цена маркировки</small><strong>'+priceText(mark)+'</strong></div><div><small>ROI</small><strong class="'+(pnl>=0?"positive":"negative")+'">'+roi+'%</strong></div><div><small>Цель чистой прибыли</small><strong class="positive">'+(target?money(target):"не задана")+'</strong></div><div><small>Открыта</small><strong>'+timeText(p.openedAt)+'</strong></div><div><small>Режим</small><strong>PAPER · без плеча</strong></div></div>'+
+'<button class="compact-close" data-close="'+p.id+'">Закрыть позицию</button></details>';
 }).join("");
 }
 function renderClosed(rows){
