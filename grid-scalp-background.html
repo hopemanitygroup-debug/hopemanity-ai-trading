@@ -108,13 +108,15 @@ footer{max-width:1180px;padding:8px 20px 30px;color:#8395a9}
 .screen-nav{position:sticky;top:0;z-index:2;display:flex;gap:7px;overflow-x:auto;padding:8px;margin:0 0 14px;border:1px solid #293a49;border-radius:15px;background:rgba(10,17,25,.94);backdrop-filter:blur(14px)}.screen-tab{flex:0 0 auto;padding:9px 13px;border:1px solid transparent;background:transparent;color:#a9bacb;font-size:13px}.screen-tab.active{background:#1b342f;border-color:#3b8068;color:#eafff5}.screen-tab b{display:inline-grid;place-items:center;min-width:20px;height:20px;margin-left:4px;padding:0 5px;border-radius:99px;background:#29483e;color:#75e2b6;font-size:11px}.screen-section{display:none}.screen-section.active{display:grid}.screen-section.card.active{display:block}
 
 .open-pager{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:14px}.open-pager span{color:#a7b8c9;font-size:12px;text-align:center}.open-pager button{padding:8px 12px;font-size:12px}.open-pager button:disabled{opacity:.35;cursor:not-allowed}@media(max-width:560px){.open-pager{justify-content:space-between;gap:6px}.open-pager span{font-size:11px}.open-pager button{min-width:72px}}
+
+.notice{display:flex;align-items:center;justify-content:space-between;gap:18px}.notice-copy{flex:1;min-width:0}.notice-start{flex:0 0 auto;white-space:nowrap;padding:12px 18px}.notice-start:disabled{opacity:.7;cursor:default}@media(max-width:700px){.notice{display:block}.notice-start{width:100%;margin-top:12px}}
 </style>
 </head>
 <body>
 <header><div class="head"><div><h1>HopeManity <span style="color:var(--green)">PAPER</span> · фоновая симуляция</h1><div class="muted">BTCUSDT · без реальных ордеров</div></div><span class="pill"><span class="dot" id="statusDot"></span><span id="status">Подключение к серверу…</span></span></div></header>
 <main>
 <nav class="screen-nav" aria-label="Разделы PAPER"><button class="screen-tab active" data-target="overview">Обзор</button><button class="screen-tab" data-target="open">Открытые <b id="navOpenCount">0</b></button><button class="screen-tab" data-target="closed">Закрытые</button><button class="screen-tab" data-target="settings">Настройки</button><button class="screen-tab" data-target="events">События</button></nav>
-<div class="notice"><strong>Серверный PAPER-режим.</strong> После запуска симуляция продолжает получать цены и вести виртуальные позиции на сервере, даже если закрыть эту страницу или браузер. Вернитесь по этой же ссылке, чтобы увидеть сессию. Реальные ордера не отправляются. При первом запуске создаётся отдельная серверная PAPER-сессия; старая локальная сессия не переносится.</div>
+<div class="notice"><div class="notice-copy"><strong>Серверный PAPER-режим.</strong> После запуска симуляция продолжает получать цены и вести виртуальные позиции на сервере, даже если закрыть эту страницу или браузер. Вернитесь по этой же ссылке, чтобы увидеть сессию. Реальные ордера не отправляются. При первом запуске создаётся отдельная серверная PAPER-сессия; старая локальная сессия не переносится.</div><button class="primary notice-start" id="quickStartButton">Запустить PAPER-бот</button></div>
 
 <section class="metrics screen-section active" data-screen="overview">
 <div class="metric"><label>BTCUSDT</label><div class="value" id="price">—</div><small id="feedInfo">Ожидание потока</small></div>
@@ -188,7 +190,7 @@ if(!response.ok)throw new Error(data.error||("HTTP "+response.status));return da
 function setError(text){$("error").textContent=text||"";}
 document.querySelectorAll(".screen-tab").forEach(function(tab){tab.addEventListener("click",function(){var target=tab.getAttribute("data-target");document.querySelectorAll(".screen-tab").forEach(function(x){x.classList.toggle("active",x===tab);});document.querySelectorAll(".screen-section").forEach(function(section){section.classList.toggle("active",section.getAttribute("data-screen")===target);});window.scrollTo({top:0,behavior:"smooth"});});});
 function render(s){
-latest=s;running=Boolean(s.running);initialized=Boolean(s.config);$("navOpenCount").textContent=String(s.openCount||0);
+latest=s;running=Boolean(s.running);initialized=Boolean(s.config);$("navOpenCount").textContent=String(s.openCount||0);$("quickStartButton").disabled=running;$("quickStartButton").textContent=running?"PAPER уже запущен":"Запустить PAPER-бот";
 $("status").textContent=s.draining?(s.openCount?"Цель достигнута · ждём цели позиций":"Цель заработка достигнута"):s.running?(s.connected?"PAPER работает на сервере":"Сервер переподключает поток"):s.halted?"PAPER остановлен по лимиту убытка":s.config?"Сессия сохранена · остановлена":"Не запущен";
 $("statusDot").className="dot"+(s.running&&s.connected?" good":s.halted?" bad":"");
 $("price").textContent=s.price?priceText(s.price):"—";
@@ -261,6 +263,7 @@ Object.keys(map).forEach(function(id){if(saved.settings[id]!=null)$(id).value=sa
 }catch(e){}
 }
 $("saveConfigButton").addEventListener("click",async function(){try{await call("/config","POST",{config:config()});configDirty=false;await poll();setError("Настройки сохранены. История и открытые позиции сохранены.");}catch(e){setError(e.message);}});
+$("quickStartButton").addEventListener("click",function(){if(!$("quickStartButton").disabled)$("startButton").click();});
 $("startButton").addEventListener("click",async function(){
 try{setError("");if(initialized&&configDirty){await call("/config","POST",{config:config()});configDirty=false;}await call("/start","POST",{config:config()});await poll();}
 catch(e){setError(e.message);}
