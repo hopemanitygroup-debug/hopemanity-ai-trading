@@ -115,7 +115,7 @@ footer{max-width:1180px;padding:8px 20px 30px;color:#8395a9}
 <body>
 <header><div class="head"><div><h1>HopeManity <span style="color:var(--green)">PAPER</span> · фоновая симуляция</h1><div class="muted">BTCUSDT · без реальных ордеров</div></div><span class="pill"><span class="dot" id="statusDot"></span><span id="status">Подключение к серверу…</span></span></div></header>
 <main>
-<nav class="screen-nav" aria-label="Разделы PAPER"><button class="screen-tab active" data-target="overview">Обзор</button><button class="screen-tab" data-target="open">Открытые <b id="navOpenCount">0</b></button><button class="screen-tab" data-target="closed">Закрытые</button><button class="screen-tab" data-target="settings">Настройки</button><button class="screen-tab" data-target="events">События</button></nav>
+<nav class="screen-nav" aria-label="Разделы PAPER"><button class="screen-tab active" data-target="overview">Обзор</button><button class="screen-tab" data-target="open">Открытые <b id="navOpenCount">0</b></button><button class="screen-tab" data-target="closed">Закрытые</button><button class="screen-tab" data-target="settings">Настройки</button><button class="screen-tab" data-target="events">События</button><button class="screen-tab" data-target="research">Исследования</button></nav>
 <div class="notice launch-panel"><span class="launch-label">PAPER · симуляция</span><button class="primary notice-start" id="quickStartButton">Запустить бота</button></div>
 
 <section class="metrics screen-section active" data-screen="overview">
@@ -127,6 +127,21 @@ footer{max-width:1180px;padding:8px 20px 30px;color:#8395a9}
 <div class="metric"><label>Ожидающие уровни</label><div class="value" id="pendingCount">0</div><small id="pendingDetail">LONG 0 · SHORT 0</small></div>
 <div class="metric"><label>Чистый заработок по цели</label><div class="value" id="profitGoalProgress">$0 / $2,000</div><small id="profitGoalDetail">Новые входы разрешены</small></div>
 <div class="metric"><label>Максимальная просадка</label><div class="value" id="drawdown">0.00%</div><small id="ticks">Тиков: 0</small></div>
+</section>
+<section class="card screen-section" data-screen="research">
+<div class="row"><div><h2>Исследования и риск</h2><span class="muted">Аналитический прототип на данных PAPER</span></div><span class="pill" id="researchRegime">Ожидание данных</span></div>
+<div class="metrics">
+<div class="metric"><label>Режим рынка</label><div class="value" id="researchRegimeValue">—</div><small id="researchRegimeNote">Собираю наблюдения цены</small></div>
+<div class="metric"><label>Импульс за минуту</label><div class="value" id="researchMomentum">—</div><small>По снимкам серверной цены</small></div>
+<div class="metric"><label>Шум / волатильность</label><div class="value" id="researchVol">—</div><small>Размах наблюдений за минуту</small></div>
+<div class="metric"><label>Риск экспозиции</label><div class="value" id="researchExposure">—</div><small id="researchExposureNote">Открытая сумма относительно баланса</small></div>
+</div>
+<div class="card" style="margin:10px 0">
+<h2>Проверка входа с учётом расходов</h2>
+<p id="researchCostText" class="muted">Ожидание настроек PAPER.</p>
+<div class="row"><strong id="researchSignal">WAIT</strong><span class="muted" id="researchConfidence">Недостаточно данных</span></div>
+</div>
+<div class="notice" style="margin:10px 0"><strong>Экспериментальный анализ.</strong> Сейчас это объяснимый фильтр правил, а не обученная ИИ‑модель и не торговый сигнал. Он не открывает и не закрывает позиции. Любую стратегию нужно отдельно сравнивать в PAPER после комиссии и проскальзывания.</div>
 </section>
 
 <section class="card screen-section" data-screen="settings">
@@ -250,8 +265,30 @@ $("eventCount").textContent=rows.length+" событий";
 if(!rows.length){$("events").innerHTML='<tr><td colspan="7" class="empty">Пока нет событий.</td></tr>';return;}
 $("events").innerHTML=rows.slice(0,100).map(function(e){return '<tr><td>'+timeText(e.time)+'</td><td>'+e.type+'</td><td>'+e.side+'</td><td>'+priceText(e.price)+'</td><td>'+e.count+'</td><td class="'+(e.pnl==null?"":e.pnl>=0?"positive":"negative")+'">'+(e.pnl==null?"—":money(e.pnl))+'</td><td>'+e.reason+'</td></tr>';}).join("");
 }
+var researchSamples=[];
+function renderResearch(s){
+var now=Date.now(), price=Number(s.price)||0;
+if(price>0){researchSamples.push({t:now,p:price});researchSamples=researchSamples.filter(function(x){return now-x.t<=60000;});}
+var first=researchSamples[0], move=first&&first.p?(price-first.p)/first.p*100:0;
+var hi=researchSamples.reduce(function(a,x){return Math.max(a,x.p);},price),lo=researchSamples.reduce(function(a,x){return Math.min(a,x.p);},price);
+var span=price?(hi-lo)/price*100:0, regime=researchSamples.length<10?"Сбор данных":Math.abs(move)<0.025?"Боковой рынок":move>0?"Восходящий импульс":"Нисходящий импульс";
+$("researchRegime").textContent=regime;$("researchRegimeValue").textContent=regime;
+$("researchRegimeNote").textContent=researchSamples.length<10?"Нужно больше наблюдений за ценой":"Окно: до 60 секунд";
+$("researchMomentum").textContent=researchSamples.length>1?(move>=0?"+":"")+move.toFixed(3)+"%":"—";
+$("researchVol").textContent=researchSamples.length>1?span.toFixed(3)+"%":"—";
+var balance=Number(s.balance)||0, exposure=Number(s.exposure)||0, exposurePct=balance?exposure/balance*100:0;
+$("researchExposure").textContent=exposurePct.toFixed(1)+"%";
+$("researchExposureNote").textContent=money(exposure)+" из "+money(balance);
+var cfg=s.config||{}, fee=Number(cfg.feePercent)||0, slip=Number(cfg.slippagePercent)||0;
+var roundCost=2*(fee+slip), step=Number(cfg.stepUsd)||0;
+$("researchCostText").textContent="Заданные расходы на круг: около "+roundCost.toFixed(3)+"% номинала. Шаг сетки "+money(step)+"; минимальный ожидаемый ход для окупаемости должен превышать расходы.";
+var costsOk=price>0&&step/price*100>roundCost;
+var signal=researchSamples.length<10?"WAIT":Math.abs(move)<0.025?"WAIT":costsOk?(move>0?"LONG":"SHORT"):"WAIT";
+$("researchSignal").textContent=signal;$("researchSignal").className=signal==="WAIT"?"muted":signal==="LONG"?"positive":"negative";
+$("researchConfidence").textContent=researchSamples.length<10?"Недостаточно наблюдений":!costsOk?"Шаг меньше расчётных расходов":signal==="WAIT"?"Импульс слабый":"Правила совпали; сигнал не подтверждён бэктестом";
+}
 async function poll(){
-try{render(await call("/state"));setError("");}
+try{var s=await call("/state");render(s);renderResearch(s);setError("");}
 catch(e){$("status").textContent="Нет связи с сервером";$("statusDot").className="dot bad";setError(e.message);}
 }
 function importPreviousSettings(){
