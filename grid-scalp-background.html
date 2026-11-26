@@ -103,14 +103,18 @@ footer{max-width:1180px;padding:8px 20px 30px;color:#8395a9}
 
 /* Flat, dense position table: no expanding cards */
 #openCards{display:block;overflow-x:auto;border:1px solid #2a3b4a;border-radius:14px;background:#0e1720}.open-list-head,.open-list-row{display:grid;grid-template-columns:.85fr .9fr 1fr 1fr 1fr .8fr 78px;align-items:center;gap:9px;min-width:780px;padding:10px 12px}.open-list-head{position:sticky;top:0;background:#172431;color:#9eafc0;font-size:11px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid #304252}.open-list-row{min-height:52px;border-bottom:1px solid #253442;font-size:13px;font-variant-numeric:tabular-nums}.open-list-row:last-child{border-bottom:0}.open-direction{font-size:11px;font-weight:800;letter-spacing:.04em}.open-direction.long{color:#48e0ad}.open-direction.short{color:#ff8291}.open-close{padding:7px 9px;font-size:11px;background:#263646;border-color:#394d5f}.open-list-row strong{font-weight:650}@media(max-width:700px){#openCards{overflow-x:visible;border-radius:12px}.open-list-head{display:none}.open-list-row{min-width:0;grid-template-columns:60px 1fr 1fr 70px;grid-template-areas:"side size pnl close" "entry mark qty close";gap:4px 8px;padding:10px;font-size:12px}.open-direction{grid-area:side}.open-list-row>strong:nth-child(2){grid-area:size}.open-list-row>span:nth-child(3){grid-area:entry}.open-list-row>span:nth-child(4){grid-area:mark}.open-list-row>span:nth-child(5){grid-area:qty;color:#9eafc0}.open-list-row>strong:nth-child(6){grid-area:pnl;text-align:right}.open-close{grid-area:close;white-space:nowrap;align-self:center;padding:8px 5px}.open-list-row>span:nth-child(3),.open-list-row>span:nth-child(4){font-size:10px;color:#91a3b5}}
+
+/* Main navigation: one focused screen at a time */
+.screen-nav{position:sticky;top:0;z-index:2;display:flex;gap:7px;overflow-x:auto;padding:8px;margin:0 0 14px;border:1px solid #293a49;border-radius:15px;background:rgba(10,17,25,.94);backdrop-filter:blur(14px)}.screen-tab{flex:0 0 auto;padding:9px 13px;border:1px solid transparent;background:transparent;color:#a9bacb;font-size:13px}.screen-tab.active{background:#1b342f;border-color:#3b8068;color:#eafff5}.screen-tab b{display:inline-grid;place-items:center;min-width:20px;height:20px;margin-left:4px;padding:0 5px;border-radius:99px;background:#29483e;color:#75e2b6;font-size:11px}.screen-section{display:none}.screen-section.active{display:grid}.screen-section.card.active{display:block}
 </style>
 </head>
 <body>
 <header><div class="head"><div><h1>HopeManity <span style="color:var(--green)">PAPER</span> · фоновая симуляция</h1><div class="muted">BTCUSDT · без реальных ордеров</div></div><span class="pill"><span class="dot" id="statusDot"></span><span id="status">Подключение к серверу…</span></span></div></header>
 <main>
+<nav class="screen-nav" aria-label="Разделы PAPER"><button class="screen-tab active" data-target="overview">Обзор</button><button class="screen-tab" data-target="open">Открытые <b id="navOpenCount">0</b></button><button class="screen-tab" data-target="closed">Закрытые</button><button class="screen-tab" data-target="settings">Настройки</button><button class="screen-tab" data-target="events">События</button></nav>
 <div class="notice"><strong>Серверный PAPER-режим.</strong> После запуска симуляция продолжает получать цены и вести виртуальные позиции на сервере, даже если закрыть эту страницу или браузер. Вернитесь по этой же ссылке, чтобы увидеть сессию. Реальные ордера не отправляются. При первом запуске создаётся отдельная серверная PAPER-сессия; старая локальная сессия не переносится.</div>
 
-<section class="metrics">
+<section class="metrics screen-section active" data-screen="overview">
 <div class="metric"><label>BTCUSDT</label><div class="value" id="price">—</div><small id="feedInfo">Ожидание потока</small></div>
 <div class="metric"><label>Виртуальная equity</label><div class="value" id="equity">—</div><small id="balance">Баланс —</small></div>
 <div class="metric"><label>Чистый PAPER P&amp;L</label><div class="value" id="pnl">—</div><small>С учётом комиссии и проскальзывания</small></div>
@@ -121,7 +125,7 @@ footer{max-width:1180px;padding:8px 20px 30px;color:#8395a9}
 <div class="metric"><label>Максимальная просадка</label><div class="value" id="drawdown">0.00%</div><small id="ticks">Тиков: 0</small></div>
 </section>
 
-<section class="card">
+<section class="card screen-section" data-screen="settings">
 <h2>Настройки PAPER</h2>
 <div class="controls">
 <label>Направление входов<select id="directionMode"><option value="both">Обе стороны</option><option value="long">Только LONG</option><option value="short">Только SHORT</option><option value="auto">По направлению цены</option></select></label>
@@ -142,16 +146,16 @@ footer{max-width:1180px;padding:8px 20px 30px;color:#8395a9}
 <div id="error" class="muted" style="margin-top:10px"></div>
 </section>
 
-<section class="card">
+<section class="card screen-section" data-screen="open">
 <div class="row"><h2>Открытые позиции</h2><span class="muted" id="openTableCount">0 позиций</span></div>
 <p class="muted">Все открытые виртуальные позиции показаны строками; кнопку «Закрыть» можно нажать у нужной позиции.</p>
 <div class="position-list" id="openCards"><div class="empty">Открытых позиций нет.</div></div>
 </section>
-<section class="card">
+<section class="card screen-section" data-screen="closed">
 <div class="row"><h2>Закрытые позиции</h2><span class="muted" id="closedTableCount">0 позиций</span></div>
 <div class="scroll"><table><thead><tr><th>Сторона</th><th>Вход</th><th>Выход</th><th>Сумма</th><th>Объём BTC</th><th>Чистый P&amp;L</th><th>Закрыта</th></tr></thead><tbody id="closedRows"><tr><td colspan="7" class="empty">Закрытых позиций нет.</td></tr></tbody></table></div>
 </section>
-<section class="card">
+<section class="card screen-section" data-screen="events">
 <div class="row"><h2>Последние события</h2><span class="muted" id="eventCount">0 событий</span></div>
 <div class="scroll"><table><thead><tr><th>Время</th><th>Событие</th><th>Сторона</th><th>Цена</th><th>Количество</th><th>P&amp;L</th><th>Причина</th></tr></thead><tbody id="events"><tr><td colspan="7" class="empty">Пока нет событий.</td></tr></tbody></table></div>
 </section>
@@ -179,8 +183,9 @@ var data=await response.json().catch(function(){return {error:"Сервер ве
 if(!response.ok)throw new Error(data.error||("HTTP "+response.status));return data;
 }
 function setError(text){$("error").textContent=text||"";}
+document.querySelectorAll(".screen-tab").forEach(function(tab){tab.addEventListener("click",function(){var target=tab.getAttribute("data-target");document.querySelectorAll(".screen-tab").forEach(function(x){x.classList.toggle("active",x===tab);});document.querySelectorAll(".screen-section").forEach(function(section){section.classList.toggle("active",section.getAttribute("data-screen")===target);});window.scrollTo({top:0,behavior:"smooth"});});});
 function render(s){
-latest=s;running=Boolean(s.running);initialized=Boolean(s.config);
+latest=s;running=Boolean(s.running);initialized=Boolean(s.config);$("navOpenCount").textContent=String(s.openCount||0);
 $("status").textContent=s.draining?(s.openCount?"Цель достигнута · ждём цели позиций":"Цель заработка достигнута"):s.running?(s.connected?"PAPER работает на сервере":"Сервер переподключает поток"):s.halted?"PAPER остановлен по лимиту убытка":s.config?"Сессия сохранена · остановлена":"Не запущен";
 $("statusDot").className="dot"+(s.running&&s.connected?" good":s.halted?" bad":"");
 $("price").textContent=s.price?priceText(s.price):"—";
