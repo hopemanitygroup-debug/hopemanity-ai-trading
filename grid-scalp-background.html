@@ -27,6 +27,76 @@ button.primary{background:#24533c;border-color:#438161;font-weight:700}button.da
 .position-list{display:grid;gap:12px}.position-card{border:1px solid #35414d;border-radius:16px;padding:16px;background:#18212b}.position-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:14px}.side-badge{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:6px;font-weight:800}.side-badge.long{background:#22bd8b;color:#08261d}.side-badge.short{background:#ed6475;color:#310b12}.position-symbol{font-size:20px;font-weight:700}.position-tag{padding:3px 8px;border:1px solid #44505d;border-radius:6px;color:#c3cbd4;font-size:13px}.position-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px 16px}.position-field{min-width:0}.position-field label{margin-bottom:4px}.position-field strong{font-size:17px;font-weight:550;overflow-wrap:anywhere}.position-pnl{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin:6px 0 14px}.position-pnl strong{font-size:26px}.position-actions{display:flex;gap:8px;margin-top:14px}.position-actions button{flex:1;background:#303a47;border-color:#303a47}@media(max-width:560px){.position-card{padding:13px}.position-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.position-symbol{font-size:18px}.position-pnl strong{font-size:23px}}.scroll{overflow:auto;border:1px solid var(--line);border-radius:12px}table{width:100%;border-collapse:collapse;min-width:690px}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #254535;white-space:nowrap}th{color:var(--muted);font-weight:600}tr:last-child td{border-bottom:0}.empty{text-align:center;color:var(--muted);padding:18px}
 footer{max-width:1120px;margin:auto;padding:4px 18px 28px;color:var(--muted);font-size:12px;line-height:1.5}
 @media(max-width:560px){main{padding:12px}.card{padding:13px}.controls{gap:10px}h1{font-size:19px}.value{font-size:20px}input{padding:10px;font-size:14px}button{padding:10px;font-size:14px}}
+
+/* HopeManity terminal refresh — presentation only */
+:root{color-scheme:dark;--bg:#080d14;--panel:#101923;--line:#253443;--green:#48e0ad;--red:#ff7185;--muted:#94a5b8;--amber:#ffc76b;--text:#edf5ff;--blue:#76a9ff}
+*{box-sizing:border-box}
+body{min-height:100vh;background:radial-gradient(900px 520px at 85% -12%,#123e39 0,transparent 68%),radial-gradient(700px 420px at 0% 35%,#102339 0,transparent 72%),var(--bg);color:var(--text);font:15px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:.01em}
+header{padding:17px max(16px,calc((100% - 1180px)/2));background:rgba(8,14,22,.86);border-bottom:1px solid #263543;box-shadow:0 12px 34px #0003;backdrop-filter:blur(18px)}
+header h1{font-size:clamp(21px,3vw,29px);letter-spacing:-.035em}
+header .muted{font-size:13px;margin-top:3px}
+main{max-width:1180px;padding:24px 20px 36px}
+.head{gap:18px}
+.pill{border-color:#29473f;background:#10231f;color:#b6c9c5;font-size:13px;padding:8px 13px}
+.notice,.card{border:1px solid #273744;border-radius:20px;background:linear-gradient(145deg,rgba(18,29,41,.96),rgba(13,23,31,.96));box-shadow:0 12px 35px #0002}
+.notice{border-color:#735a35;background:linear-gradient(135deg,#302719,#1d1b18);color:#ffdfa4}
+.card{padding:22px;margin:16px 0}
+.card h2{font-size:20px;letter-spacing:-.02em}
+.metrics{gap:12px;margin:18px 0 22px}
+.metric{position:relative;overflow:hidden;padding:18px;border:1px solid #263746;border-radius:18px;background:linear-gradient(145deg,#121e29,#0f1922);box-shadow:inset 0 1px #ffffff08;min-height:112px}
+.metric:after{content:"";position:absolute;right:-25px;top:-35px;width:95px;height:95px;border-radius:50%;background:radial-gradient(circle,#4be1ad12,transparent 70%);pointer-events:none}
+.metric label{font-size:12px;letter-spacing:.045em;text-transform:uppercase;color:#9baec0}
+.value{font-size:25px;letter-spacing:-.035em}
+small,.muted{color:#9aabbd}
+.positive{color:var(--green)}.negative{color:var(--red)}
+.controls{gap:14px}
+label{font-size:13px;color:#a7b7c8}
+input,select{background:#0a121a;border-color:#2b3d4d;border-radius:12px;transition:border-color .18s,box-shadow .18s}
+input:focus,select:focus{outline:none;border-color:#54c9a0;box-shadow:0 0 0 3px #48e0ad1d}
+button{border-color:#304252;border-radius:12px;background:#182633;transition:transform .15s,border-color .15s,background .15s}
+button:hover{transform:translateY(-1px);border-color:#568b79;background:#20352f}
+button.primary{background:linear-gradient(135deg,#207957,#185a47);border-color:#3c9a78}
+button.danger{background:#2a1b22;border-color:#79434f;color:#ffabb4}
+.actions{gap:14px}
+.position-list{gap:14px}
+.position-card{background:linear-gradient(145deg,#172330,#121b25);border:1px solid #30404f;border-radius:20px;box-shadow:0 10px 26px #0002}
+.position-head{gap:10px}
+.position-tag{background:#101923;border-color:#394b5c;color:#b8c7d5;border-radius:8px}
+.position-field label{font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+.position-field strong{font-size:18px}
+.position-pnl{padding:13px 15px;border:1px solid #2b3b49;border-radius:14px;background:#0d1720}
+.position-pnl strong{letter-spacing:-.035em}
+.position-actions button{background:#253342;border-color:#35485a}
+.scroll{border-color:#2b3b49;border-radius:14px}
+th{background:#111c27}
+td,th{border-bottom-color:#263746}
+.empty{padding:22px}
+footer{max-width:1180px;padding:8px 20px 30px;color:#8395a9}
+@media(max-width:700px){
+ main{padding:15px 12px 28px}
+ header{padding:14px 14px}
+ .card{padding:16px;border-radius:17px}
+ .metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ .metric{padding:13px;min-height:100px;border-radius:15px}
+ .metric label{font-size:10px;line-height:1.35}
+ .value{font-size:21px}
+ .controls{gap:10px}
+ input,select{padding:11px;font-size:14px}
+ .position-card{padding:14px;border-radius:17px}
+ .position-grid{gap:12px}
+ .position-field strong{font-size:16px}
+ .position-pnl{padding:11px}
+ .position-pnl strong{font-size:22px}
+ .actions .row{width:100%}
+ .actions .row button{flex:1}
+}
+@media(max-width:390px){
+ .metrics{grid-template-columns:1fr 1fr}
+ .metric{padding:11px}
+ .value{font-size:19px}
+ .position-grid{grid-template-columns:1fr 1fr}
+}
+
 </style>
 </head>
 <body>
